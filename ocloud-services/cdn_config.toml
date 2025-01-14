@@ -1,0 +1,3 @@
+# Where the uploaded files are stored.
+save_dir = "./uploaded_files"
+no_duplicates = false
