@@ -1,0 +1,20 @@
+[package]
+name = "ocloud-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.91"
+arboard = "3.4.1"
+clap = { version = "4.5.20", features = ["derive"] }
+dirs = "5.0.1"
+reqwest = { version = "0.12.8", features = ["multipart", "stream"] }
+serde = { version = "1.0.213", features = ["derive"] }
+tokio = { version = "1.41.0", features = ["full"] }
+toml = "0.8.19"
+models = { path = "../models"}
+tqdm = "0.7.0"
+async-stream = "0.3.6"
+tokio-util = { version = "0.7.13", features = ["full"] }
+futures-util = "0.3.31"
+indicatif = "0.17.9"

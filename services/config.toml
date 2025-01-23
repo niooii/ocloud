@@ -1,0 +1,2 @@
+# Where the uploaded files are stored.
+save_dir = "./data"
