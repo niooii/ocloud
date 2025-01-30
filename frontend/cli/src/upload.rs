@@ -32,8 +32,6 @@ pub async fn upload_file(upload_path: &Path, file_path: &Path) -> Result<String,
             upload_stream(file_path).await?
         )));
 
-    
-
     let endpoint: String = format!(
         "{}/media/{}/",
         CONFIG.cloud_url.clone(),
