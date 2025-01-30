@@ -1,10 +1,11 @@
 use std::{io::Write, path::PathBuf, sync::{Arc, Mutex}, time::{SystemTime, UNIX_EPOCH}};
 use axum::{body::Body, extract::{DefaultBodyLimit, Multipart, Path, Query, State}, http::{header, HeaderValue}, response::Response, routing::get, Json, Router};
+use config::SERVER_CONFIG;
 use tokio::{fs::File, io::AsyncWriteExt, sync::Notify};
 use sha2::{Digest, Sha256};
 use tokio::fs;
 
-use crate::{error::Error, storage::{controller::{StorageController}, model::{FileUploadInfo, Media, VirtualPath}}, CONFIG};
+use crate::{error::Error, storage::{controller::{StorageController}, model::{FileUploadInfo, Media, VirtualPath}}};
 use crate::error::Result;
 
 pub fn routes(controller: StorageController) -> Router {
@@ -15,7 +16,7 @@ pub fn routes(controller: StorageController) -> Router {
             .delete(delete_media)
             .post(upload_media)
             .layer(
-                if let Some(s) = CONFIG.max_filesize {
+                if let Some(s) = SERVER_CONFIG.max_filesize {
                     DefaultBodyLimit::max(s)
                 } else {
                     DefaultBodyLimit::disable()
@@ -35,7 +36,7 @@ pub async fn upload_media(
     if let Some(mut field) = multipart.next_field().await
     .map_err(|e| Error::AxumError { why: format!("Multipart error: {}", e.body_text()) })? {
         
-        let save_dir = PathBuf::from(&CONFIG.save_dir);
+        let save_dir = PathBuf::from(&SERVER_CONFIG.data_dir);
         
         // Name should be the name of the file, including the extension.
         let name: String = field.name().expect("File has no name??").to_string();

@@ -1,13 +1,12 @@
 use std::{collections::HashMap, path::{Path, PathBuf}, sync::{Arc, Mutex}, time::{SystemTime, UNIX_EPOCH}};
 
-use crate::{error::Result, storage::{filesystem::SFileCreateInfo, model::{FileUploadInfo, Media, SFileRow}}, Error, CONFIG};
+use crate::{error::Result, storage::{filesystem::SFileCreateInfo, model::{FileUploadInfo, Media, SFileRow}}, Error};
 use serde::{Serialize, Deserialize};
 use sqlx::{postgres::PgRow, query, FromRow, PgPool, Postgres, Row, Transaction};
 use tokio::{fs, sync::{Notify, RwLock}};
 use key_mutex::tokio::KeyMutex;
 
 use super::{filesystem::FileSystem, model::VirtualPath};
-use models::SFile;
 
 pub type StorageController = Arc<StorageControllerInner>;
 

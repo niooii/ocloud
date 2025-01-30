@@ -1,12 +1,12 @@
 [package]
-name = "ocloud-services"
+name = "server"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 axum = { version = "0.7.7", features = [ "multipart", "macros" ]}
 bytes = "1.7.2"
-config = { version = "0.14.0", features = ["toml"] }
+dirs = "6.0.0"
 dotenvy = "0.15.7"
 futures = "0.3.30"
 futures-util = "0.3.30"
@@ -21,4 +21,4 @@ sqlx = {version = "0.8.2", features = [ "runtime-tokio-native-tls", "postgres", 
 strum_macros = "0.26.4"
 tokio = { version = "1.40.0", features = ["full"] }
 tokio-util = { version = "0.7.12", features = ["io"] }
-models = { path = "../rs-shared"}
+config = { path = "../config" }

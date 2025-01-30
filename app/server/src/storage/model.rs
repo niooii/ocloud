@@ -1,8 +1,8 @@
 use std::{future::Future, path::{Path, PathBuf}, pin::Pin};
+use config::SERVER_CONFIG;
 use serde::de::Error as err;
 use axum::extract::multipart::Field;
 use futures::{Stream, StreamExt};
-use models::SFile;
 use serde::{Deserialize, Serialize};
 use sha2::{ Digest, Sha256};
 use sqlx::{prelude::FromRow, PgPool};
@@ -10,7 +10,6 @@ use tokio::{fs::File, io::{AsyncRead, AsyncReadExt}};
 use bytes::Bytes;
 use tokio_util::io::ReaderStream;
 use crate::error::{Error, Result};
-use crate::CONFIG;
 
 use super::{controller::StorageController};
 
@@ -37,7 +36,7 @@ impl Media {
     /// Storage path follows this format: 
     /// `save_dir/[first 2 chars of hash]/[next 2]/[rest of hash]`
     pub async fn true_path(&self) -> PathBuf {
-        let save_dir = &CONFIG.save_dir;
+        let save_dir = &SERVER_CONFIG.data_dir;
 
         let hash = self.file_hash.clone();
         let first_dir = &hash[0..2];
@@ -60,6 +59,16 @@ impl Media {
         Ok(tokio::fs::remove_file(self.true_path().await.as_path()).await
             .map_err(|e| Error::IOError { why: e.to_string() })?)
     }
+}
+
+#[derive(Serialize)]
+pub struct SFile {
+    pub is_dir: bool,
+    pub full_path: String,
+    pub created_at: i64,
+    pub modified_at: i64,
+    // Either the name of the directory or the file
+    pub top_level_name: String
 }
 
 // A row from the database.

@@ -1,26 +1,41 @@
+use std::{path::PathBuf, process::exit};
+use crate::error::{Error, Result};
 use std::{ffi::{OsStr, OsString}, path::Path};
-use crate::{config::Config, CONFIG};
+use config::CLI_CONFIG;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use tokio::{fs::{read, File}, io::AsyncReadExt};
-use reqwest::{multipart::{Form, Part}, Body, Client, StatusCode};
+use reqwest::{multipart::{Form, Part}, Body, Client, StatusCode, Url};
 use tokio_util::{bytes::Bytes, io::ReaderStream};
 use futures_util::{stream::StreamExt, Stream};
-use tqdm::tqdm_async;
 
-pub enum UploadError {
-    NoFileFound,
-    IoError { err: String },
-    ReqwestError { err: reqwest::Error },
-    FailStatusCode { status_code: StatusCode }
-}
-
-impl From<std::io::Error> for UploadError {
-    fn from(value: std::io::Error) -> Self {
-        Self::IoError { err: value.to_string() }
+pub async fn handler(path: PathBuf, preserve: bool, dir: String) -> Result<String> {
+    if let Err(e) = Url::parse(&CLI_CONFIG.server_url) {
+        eprintln!("Error: cloud url is invalid or does not exist.");
+        eprintln!("Use the set-url command to set a cloud url.");
+        return Err(e.into());
     }
+
+    let upload_dir = PathBuf::from(
+        format!(
+            "root/{}",
+            dir.trim_matches('/').to_string()
+        )
+    );
+
+    let upload_path = upload_dir.join({
+        if preserve {
+            path.clone()
+        } else {
+            PathBuf::from(path.file_name().unwrap())
+        }
+    });
+
+    println!("wiw chat: {}", upload_path.to_string_lossy());
+
+    upload_file(&upload_path, &path).await
 }
 
-pub async fn upload_file(upload_path: &Path, file_path: &Path) -> Result<String, UploadError> {
+pub async fn upload_file(upload_path: &Path, file_path: &Path) -> Result<String> {
     println!("Uploading {:?}...", file_path.file_name().unwrap_or_default());
 
     let client = Client::new();
@@ -34,26 +49,26 @@ pub async fn upload_file(upload_path: &Path, file_path: &Path) -> Result<String,
 
     let endpoint: String = format!(
         "{}/media/{}/",
-        CONFIG.cloud_url.clone(),
+        CLI_CONFIG.server_url.clone(),
         upload_path.parent().unwrap().to_string_lossy()
     );
     println!("{endpoint}");
     let res = client.post(&endpoint)
         .multipart(multipart_form)
-        .send().await.map_err(|e| UploadError::ReqwestError { err: e })?;
+        .send().await?;
 
     if !res.status().is_success() {
-        return Err(UploadError::FailStatusCode { status_code: res.status() });
+        return Err(Error::FailStatusCode { status_code: res.status() });
     }
 
-    let media_endpoint = res.text().await
-        .map_err(|e| UploadError::ReqwestError { err: e })?.to_string();
+    let media_endpoint = res.text().await?.to_string();
     
-    Ok(format!("{}/media/{}", CONFIG.cloud_url, media_endpoint))
+    Ok(format!("{}/media/{}", CLI_CONFIG.server_url, media_endpoint))
 }
 
-pub async fn upload_stream(path: &Path) -> Result<impl Stream<Item = Result<Bytes, std::io::Error>>, UploadError> {
-    let file = File::open(path)
+pub async fn upload_stream(path: &Path) 
+    -> Result<impl Stream<Item = std::result::Result<Bytes, std::io::Error>>> {
+    let file = tokio::fs::File::open(path)
         .await?;
     let size = file.metadata().await?.len();
     
