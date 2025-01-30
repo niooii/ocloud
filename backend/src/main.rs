@@ -45,7 +45,7 @@ async fn main() {
         .nest("", routes::routes(mc).await)
         .layer(middleware::map_response(main_response_mapper));
 
-    let listener = TcpListener::bind("127.0.0.1:9100").await.unwrap();
+    let listener = TcpListener::bind("127.0.0.1:9101").await.unwrap();
 
     println!("Initialization complete..");
     serve(listener, routes.into_make_service()).await.expect("Failed to start listening");
