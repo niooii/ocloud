@@ -2,28 +2,26 @@ mod web;
 mod storage;
 mod error;
 use web::*;
-use std::env;
+use std::{env, sync::Arc};
 use axum::{middleware, response::{IntoResponse, Response}, serve::serve, Json, Router};
 use config::Config;
 use error::Error;
-use storage::{controller::StorageController, model::ServerConfig};
+use storage::{controller::{StorageController, StorageControllerInner}, model::ServerConfig};
 use serde_json::json;                   
 use sqlx::PgPool;
 use tokio::{net::TcpListener, sync::RwLock};
 use lazy_static::lazy_static;
 
 lazy_static! {
-    pub static ref CONFIG: RwLock<ServerConfig> = {
+    pub static ref CONFIG: ServerConfig = {
         // Read configuration file
         let read_config = Config::builder()
             .add_source(config::File::with_name("./config"))
             .build()
             .expect("Unable to read config file data");
 
-        RwLock::new(
-            read_config.try_deserialize()
-                .expect("Could not deserialize settings file.")
-        )
+        read_config.try_deserialize()
+            .expect("Could not deserialize settings file.")
     };
 }
 
@@ -32,7 +30,7 @@ async fn main() {
     dotenvy::dotenv().expect("Failed to get env variables from .env");
 
     // Create file save directory if it doesn't exist already
-    tokio::fs::create_dir_all(&CONFIG.read().await.save_dir).await
+    tokio::fs::create_dir_all(&CONFIG.save_dir).await
         .expect("Failed to create save directory");
 
     let db_pool = PgPool::connect(
@@ -41,7 +39,7 @@ async fn main() {
 
     sqlx::migrate!("./migrations").run(&db_pool).await.expect("Failed to run migrations.");
 
-    let mc = StorageController::new(db_pool);
+    let mc = Arc::new(StorageControllerInner::new(db_pool).await);
 
     let routes = Router::new()
         .nest("", routes::routes(mc).await)

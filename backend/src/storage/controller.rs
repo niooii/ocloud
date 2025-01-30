@@ -9,24 +9,26 @@ use key_mutex::tokio::KeyMutex;
 use super::{filesystem::FileSystem, model::VirtualPath};
 use models::SFile;
 
+pub type StorageController = Arc<StorageControllerInner>;
+
 #[derive(Clone)]
-pub struct StorageController {
+pub struct StorageControllerInner {
     db_pool: PgPool,
     pub fs: FileSystem,
     pub active_uploads: Arc<KeyMutex<String, ()>>
 }
 
-impl StorageController {
-    pub fn new(db_pool: PgPool) -> Self {
+impl StorageControllerInner {
+    pub async fn new(db_pool: PgPool) -> Self {
         Self {
-            fs: FileSystem::new(db_pool.clone()),
+            fs: FileSystem::new(db_pool.clone()).await,
             db_pool,
             active_uploads: Arc::new(KeyMutex::new())
         }
     }
 }
 
-impl StorageController {
+impl StorageControllerInner {
     pub async fn finish_upload(&self, mut info: FileUploadInfo) -> Result<String> {
         let mut tx = self.db_pool.begin().await?;
         info.vpath.push_file(info.file_name)?;

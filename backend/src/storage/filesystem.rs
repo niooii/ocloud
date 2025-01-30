@@ -25,10 +25,19 @@ pub struct FileSystem {
 }
 
 impl FileSystem {
-    pub fn new(db_pool: PgPool) -> Self {
-        Self {
+    pub async fn new(db_pool: PgPool) -> Self {
+        let fs = Self {
             db_pool
+        };
+        if let Err(e) = fs.make_dir(&VirtualPath::root(), None).await {
+            match e {
+                Error::PathAlreadyExists => println!("Root content directory exists."),
+                _ => panic!("Failed to create root content directory.")
+            }
+        } else {
+            println!("Created root content directory.")
         }
+        fs
     }
 
     async fn execute_maybe_transacted<'a>(
@@ -227,7 +236,7 @@ impl FileSystem {
         let full_path = vpath.to_string();
             sqlx::query!(
                 r"SELECT media_id FROM sfiles
-                WHERE full_path = $1",
+                WHERE full_path = $1 AND is_dir = false",
                 full_path
             ).fetch_optional(&self.db_pool).await
                 .map_err(Error::from)

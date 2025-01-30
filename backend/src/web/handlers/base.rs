@@ -1,6 +1,5 @@
 use std::{io::Write, path::PathBuf, sync::{Arc, Mutex}, time::{SystemTime, UNIX_EPOCH}};
-use axum::{body::Body, extract::{Multipart, Path, Query, State}, http::{header, HeaderValue}, response::Response, Json};
-use serde::Deserialize;
+use axum::{body::Body, extract::{DefaultBodyLimit, Multipart, Path, Query, State}, http::{header, HeaderValue}, response::Response, routing::get, Json, Router};
 use tokio::{fs::File, io::AsyncWriteExt, sync::Notify};
 use sha2::{Digest, Sha256};
 use tokio::fs;
@@ -8,9 +7,26 @@ use tokio::fs;
 use crate::{error::Error, storage::{controller::{StorageController}, model::{FileUploadInfo, Media, VirtualPath}}, CONFIG};
 use crate::error::Result;
 
+pub fn routes(controller: StorageController) -> Router {
+    Router::new()
+        .route(
+            "/media/*path", 
+            get(get_media)
+            .delete(delete_media)
+            .post(upload_media)
+            .layer(
+                if let Some(s) = CONFIG.max_filesize {
+                    DefaultBodyLimit::max(s)
+                } else {
+                    DefaultBodyLimit::disable()
+                }
+            )
+        ).with_state(controller)
+}
+
 pub async fn upload_media(
     State(mc): State<StorageController>, 
-    Path(path): Path<VirtualPath>,
+    Path(mut path): Path<VirtualPath>,
     mut multipart: Multipart
 ) -> Result<String> {
     path.err_if_file()?;
@@ -19,11 +35,16 @@ pub async fn upload_media(
     if let Some(mut field) = multipart.next_field().await
     .map_err(|e| Error::AxumError { why: format!("Multipart error: {}", e.body_text()) })? {
         
-        let save_dir = PathBuf::from(&CONFIG.read().await.save_dir);
+        let save_dir = PathBuf::from(&CONFIG.save_dir);
         
         // Name should be the name of the file, including the extension.
         let name: String = field.name().expect("File has no name??").to_string();
         println!("Got file: {name}");
+        println!("for path: {}", path.to_string());
+
+        if path.to_string_with_trailing().is_empty() {
+            path = VirtualPath::root();
+        }
 
         let uploaded_time: i64 = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -92,9 +113,10 @@ pub async fn upload_media(
 }
 
 pub async fn get_media(
-    State(storage): State<StorageController>,
     Path(path): Path<VirtualPath>,
+    State(storage): State<StorageController>,
 ) -> Result<Response> {
+    println!("HEHEHAW {}", path.to_string_with_trailing());
     if !path.is_dir() {
         let media: Media = storage.get_media(&path).await?;
 

@@ -1,9 +1,9 @@
 use serde::Serialize;
-use strum_macros::AsRefStr;
+use strum_macros::{AsRefStr, Display};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
-#[derive(Clone, Debug, Serialize, AsRefStr)]
+#[derive(Clone, Debug, Serialize, AsRefStr, Display)]
 #[serde(tag = "type", content = "why")]
 pub enum Error {
     NoAuthError,

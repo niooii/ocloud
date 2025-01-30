@@ -1,5 +1,5 @@
 use std::{future::Future, path::{Path, PathBuf}, pin::Pin};
-
+use serde::de::Error as err;
 use axum::extract::multipart::Field;
 use futures::{Stream, StreamExt};
 use models::SFile;
@@ -9,8 +9,7 @@ use sqlx::{prelude::FromRow, PgPool};
 use tokio::{fs::File, io::{AsyncRead, AsyncReadExt}};
 use bytes::Bytes;
 use tokio_util::io::ReaderStream;
-use crate::error::Result;
-use crate::error::Error;
+use crate::error::{Error, Result};
 use crate::CONFIG;
 
 use super::{controller::StorageController};
@@ -38,7 +37,7 @@ impl Media {
     /// Storage path follows this format: 
     /// `save_dir/[first 2 chars of hash]/[next 2]/[rest of hash]`
     pub async fn true_path(&self) -> PathBuf {
-        let save_dir = &CONFIG.read().await.save_dir;
+        let save_dir = &CONFIG.save_dir;
 
         let hash = self.file_hash.clone();
         let first_dir = &hash[0..2];
@@ -106,6 +105,8 @@ fn check_is_dir(path: &PathBuf) -> bool {
 }
 
 #[derive(Debug)]
+/// A path that points to a file on the host machines filesystem, used to access uploaded content.
+/// The path can never be empty.
 pub struct VirtualPath {
     path: PathBuf,
     is_dir: bool
@@ -114,7 +115,7 @@ pub struct VirtualPath {
 impl VirtualPath {
     pub fn root() -> Self {
         Self {
-            path: PathBuf::from("/"),
+            path: PathBuf::from("root/"),
             is_dir: true
         }
     }
@@ -128,7 +129,7 @@ impl VirtualPath {
     pub fn path_parts_no_root(&self) -> Vec<String> {
         self.path.components()
             .map(|comp| comp.as_os_str().to_string_lossy().to_string())
-            .filter(|c| c != "/")
+            .skip(1)
             .collect()
     }
 
@@ -180,16 +181,18 @@ impl VirtualPath {
     }
 }
 
-// i want the path strings to have a root, like
-// '/school/photos' or something
 impl<'de> Deserialize<'de> for VirtualPath {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de> {
+        let val = String::deserialize(deserializer)?;
+        if !val.starts_with("root/") {
+            return Err(Error::Error { why: "Path should start with 'root/'.".into() })
+                .map_err(D::Error::custom);
+        }
         Ok(
             VirtualPath::from(
-                format!("/{}", 
-                String::deserialize(deserializer)?)
+                val
             )
         )
     }
@@ -197,17 +200,22 @@ impl<'de> Deserialize<'de> for VirtualPath {
 
 impl From<String> for VirtualPath {
     fn from(value: String) -> Self {
-        let path = PathBuf::from(value);
-        Self { 
-            is_dir: check_is_dir(&path),
-            path
-        }
+        Self::from(value.as_str())
     }
 }
 
 impl From<&str> for VirtualPath {
     fn from(value: &str) -> Self {
-        let path = PathBuf::from(value);
+        let path = PathBuf::from({
+            // remove adjacent duplicate '/' characters.
+            let mut dedup = String::new();
+            for c in value.chars() {
+                if !(dedup.ends_with('/') && c == '/') {
+                    dedup.push(c);
+                } 
+            }
+            dedup
+        });
         Self { 
             is_dir: check_is_dir(&path),
             path

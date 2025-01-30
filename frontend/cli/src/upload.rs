@@ -1,5 +1,5 @@
 use std::{ffi::{OsStr, OsString}, path::Path};
-use crate::config::Config;
+use crate::{config::Config, CONFIG};
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use tokio::{fs::{read, File}, io::AsyncReadExt};
 use reqwest::{multipart::{Form, Part}, Body, Client, StatusCode};
@@ -20,19 +20,26 @@ impl From<std::io::Error> for UploadError {
     }
 }
 
-pub async fn upload_file(path: &Path, config: &Config) -> Result<String, UploadError> {
-    println!("Uploading {:?}...", path.file_name().unwrap_or_default());
+pub async fn upload_file(upload_path: &Path, file_path: &Path) -> Result<String, UploadError> {
+    println!("Uploading {:?}...", file_path.file_name().unwrap_or_default());
 
     let client = Client::new();
 
-    let fname: String = path.file_name().unwrap().to_string_lossy().to_string();
+    let fname: String = file_path.file_name().unwrap().to_string_lossy().to_string();
 
     let multipart_form = Form::new()
         .part(fname, Part::stream(Body::wrap_stream(
-            upload_stream(path).await?
+            upload_stream(file_path).await?
         )));
 
-    let endpoint: String = config.cloud_url.clone();
+    
+
+    let endpoint: String = format!(
+        "{}/media/{}/",
+        CONFIG.cloud_url.clone(),
+        upload_path.parent().unwrap().to_string_lossy()
+    );
+    println!("{endpoint}");
     let res = client.post(&endpoint)
         .multipart(multipart_form)
         .send().await.map_err(|e| UploadError::ReqwestError { err: e })?;
@@ -44,7 +51,7 @@ pub async fn upload_file(path: &Path, config: &Config) -> Result<String, UploadE
     let media_endpoint = res.text().await
         .map_err(|e| UploadError::ReqwestError { err: e })?.to_string();
     
-    Ok(format!("{}{}", config.cloud_url, media_endpoint))
+    Ok(format!("{}/media/{}", CONFIG.cloud_url, media_endpoint))
 }
 
 pub async fn upload_stream(path: &Path) -> Result<impl Stream<Item = Result<Bytes, std::io::Error>>, UploadError> {
