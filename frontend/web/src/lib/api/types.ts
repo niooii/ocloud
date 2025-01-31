@@ -8,14 +8,16 @@ export interface SFile {
 }
 
 export class BaseClient {
-    protected baseUrl: string;
+    protected serverUrl: string;
     protected headers: Record<string, string>;
   
     constructor() {
-        this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        this.headers = {
-            'Content-Type': 'application/json',
-        };
+        const url = localStorage.getItem("OCLOUD_URL");
+        if (!url) 
+            throw new Error("No server url, could not create api wrapper.");
+
+        this.serverUrl = url;
+        this.headers = {};
     }
   
     protected getHeaders(): Record<string, string> {
@@ -33,7 +35,7 @@ export class BaseClient {
         endpoint: string,
         options: RequestInit = {}
     ): Promise<T> {
-        const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        const response = await fetch(`${this.serverUrl}${endpoint}`, {
             ...options,
             headers: {
                 ...this.getHeaders(),
