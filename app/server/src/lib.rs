@@ -1,6 +1,6 @@
 mod web;
 mod storage;
-mod error;
+pub mod error;
 use web::*;
 use std::{env, sync::Arc};
 use axum::{middleware, response::{IntoResponse, Response}, serve::serve, Json, Router};
@@ -11,20 +11,20 @@ use sqlx::PgPool;
 use tokio::{net::TcpListener, sync::RwLock};
 use config::SERVER_CONFIG;
 
-pub async fn run(host: &str, port: u16) {
-    dotenvy::dotenv().expect("Failed to get env variables from .env");
+use error::Result;
 
+pub async fn run(host: &str, port: u16) -> Result<()> {
     // Create file save directory if it doesn't exist already
-    tokio::fs::create_dir_all(&SERVER_CONFIG.data_dir).await
-        .expect("Failed to create save directory");
+    tokio::fs::create_dir_all(&SERVER_CONFIG.data_dir).await?;
 
     println!("thingy: {:?}", SERVER_CONFIG.data_dir);
 
     let db_pool = PgPool::connect(
         env::var("DATABASE_URL").expect("Could not find DATABASE_URL in env").as_str()
-    ).await.expect("Failed to connect to database");
+    ).await?;
 
-    sqlx::migrate!("./migrations").run(&db_pool).await.expect("Failed to run migrations.");
+    sqlx::migrate!("./migrations").run(&db_pool).await
+        .expect("Failed to run migrations.");
 
     let mc = Arc::new(StorageControllerInner::new(db_pool).await);
 
@@ -34,10 +34,11 @@ pub async fn run(host: &str, port: u16) {
 
     let listener = TcpListener::bind(
         format!("{}:{}", host, port)
-    ).await.unwrap();
+    ).await?;
 
     println!("Initialization complete..");
-    serve(listener, routes.into_make_service()).await.expect("Failed to start listening");
+    serve(listener, routes.into_make_service()).await?;
+    Ok(())
 }
 
 async fn main_response_mapper(res: Response) -> Response {

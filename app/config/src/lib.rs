@@ -1,6 +1,7 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, process::exit};
 
 use cli::CliConfig;
+use inquire::Confirm;
 use lazy_static::lazy_static;
 use server::ServerConfig;
 
@@ -40,12 +41,43 @@ pub trait Config: Sized + Clone {
     fn save(&self) -> Result<()>;
 }
 
+fn parse_or_prompt<T>(config_name: &str) -> T
+where T: Config + Default {
+    match T::read_or_create_default() {
+        Ok(c) => c,
+        Err(e) => {
+            match e {
+                Error::DeserializeError => {
+                    let proceed = Confirm::new(
+                        &format!("Error parsing {config_name} config. Restore default and load?")
+                        )
+                        .with_default(false)
+                        .with_help_message(
+                            &format!("File can be found in {}.", CONFIG_DIR.to_string_lossy())
+                        )
+                        .prompt()
+                        .unwrap_or(false);
+
+                    if proceed {
+                        let def = T::default();
+                        def.save().expect("Error saving default");
+                        def
+                    } else {
+                        exit(1);
+                    }
+                },
+                _ => panic!("{e:?}"),
+            }
+        }
+    }
+}
+
 lazy_static! {
     pub static ref CLI_CONFIG: CliConfig = {
-        CliConfig::read_or_create_default().expect("Failed to read/create cli config")
+        parse_or_prompt("CLI")
     };
     pub static ref SERVER_CONFIG: ServerConfig = {
-        ServerConfig::read_or_create_default().expect("Failed to read/create server config")
+        parse_or_prompt("server")
     };
     pub static ref CONFIG_DIR: PathBuf = {
         dirs::config_dir().unwrap_or_default().join("ocloud")

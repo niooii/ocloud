@@ -4,6 +4,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {
+    ServerError { err: server::error::Error },
     NoFileFound,
     IoError { err: String },
     ReqwestError { err: reqwest::Error },
@@ -26,5 +27,11 @@ impl From<reqwest::Error> for Error {
 impl From<url::ParseError> for Error {
     fn from(value: url::ParseError) -> Self {
         Self::UrlParseError { issue: value.to_string() }
+    }
+}
+
+impl From<server::error::Error> for Error {
+    fn from(value: server::error::Error) -> Self {
+        Self::ServerError { err: value }
     }
 }
