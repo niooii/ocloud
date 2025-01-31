@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::util;
 use crate::Config;
 use crate::Result;
+use crate::DATA_DIR;
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct ServerConfig {
@@ -16,7 +17,7 @@ pub struct ServerConfig {
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
-            data_dir: dirs::data_dir().unwrap_or_default(),
+            data_dir: DATA_DIR.clone().join("media"),
             max_filesize: None
         }
     }

@@ -18,6 +18,8 @@ pub async fn run(host: &str, port: u16) {
     tokio::fs::create_dir_all(&SERVER_CONFIG.data_dir).await
         .expect("Failed to create save directory");
 
+    println!("thingy: {:?}", SERVER_CONFIG.data_dir);
+
     let db_pool = PgPool::connect(
         env::var("DATABASE_URL").expect("Could not find DATABASE_URL in env").as_str()
     ).await.expect("Failed to connect to database");

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use cli::CliConfig;
 use lazy_static::lazy_static;
 use server::ServerConfig;
@@ -44,6 +46,12 @@ lazy_static! {
     };
     pub static ref SERVER_CONFIG: ServerConfig = {
         ServerConfig::read_or_create_default().expect("Failed to read/create server config")
+    };
+    pub static ref CONFIG_DIR: PathBuf = {
+        dirs::config_dir().unwrap_or_default().join("ocloud")
+    };
+    pub static ref DATA_DIR: PathBuf = {
+        dirs::data_dir().unwrap_or_default().join("ocloud")
     };
 }
 
