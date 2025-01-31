@@ -11,7 +11,7 @@ use crate::error::Result;
 pub fn routes(controller: StorageController) -> Router {
     Router::new()
         .route(
-            "/media/*path", 
+            "/files/*path", 
             get(get_media)
             .delete(delete_media)
             .post(upload_media)

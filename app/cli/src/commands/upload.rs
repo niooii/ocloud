@@ -48,7 +48,7 @@ pub async fn upload_file(upload_path: &Path, file_path: &Path) -> Result<String>
         )));
 
     let endpoint: String = format!(
-        "{}/media/{}/",
+        "{}/files/{}/",
         CLI_CONFIG.server_url.clone(),
         upload_path.parent().unwrap().to_string_lossy()
     );
@@ -63,7 +63,7 @@ pub async fn upload_file(upload_path: &Path, file_path: &Path) -> Result<String>
 
     let media_endpoint = res.text().await?.to_string();
     
-    Ok(format!("{}/media/{}", CLI_CONFIG.server_url, media_endpoint))
+    Ok(format!("{}/files/{}", CLI_CONFIG.server_url, media_endpoint))
 }
 
 pub async fn upload_stream(path: &Path) 

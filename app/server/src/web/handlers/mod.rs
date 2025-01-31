@@ -1,2 +1,3 @@
-pub mod base;
-pub mod streaming;
+pub mod media;
+pub mod auth;
+pub mod stream;

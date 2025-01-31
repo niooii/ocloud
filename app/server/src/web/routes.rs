@@ -4,7 +4,7 @@ use axum::Router;
 use tower_http::cors::CorsLayer;
 
 use crate::storage::controller::StorageController;
-use crate::handlers::base;
+use crate::handlers::media;
 
 pub async fn routes(controller: StorageController) -> Router {
     let cors = CorsLayer::new()
@@ -17,7 +17,7 @@ pub async fn routes(controller: StorageController) -> Router {
         ]);
 
     Router::new()
-        .nest("/", base::routes(controller))
+        .nest("/", media::routes(controller))
         .route("/ping", get(ping))
         .layer(cors)
 }
