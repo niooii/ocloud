@@ -51,6 +51,26 @@ export class BaseClient {
         return response.json();
     }
   
+    protected async requestBytes(
+        endpoint: string,
+        options: RequestInit = {}
+    ): Promise<Blob> {
+        const response = await fetch(`${this.serverUrl}${endpoint}`, {
+            ...options,
+            headers: {
+                ...this.getHeaders(),
+                ...options.headers,
+            },
+        });
+    
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'API request failed');
+        }
+    
+        return response.blob();
+    }
+  
     protected async requestString(
         endpoint: string,
         options: RequestInit = {}
