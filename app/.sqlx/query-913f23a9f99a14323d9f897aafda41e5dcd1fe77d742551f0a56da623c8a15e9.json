@@ -1,0 +1,60 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT * FROM sfiles\n            WHERE path_parts[1:$1] = $2 AND array_length(path_parts, 1) = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "media_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "is_dir",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "full_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "path_parts",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "modified_at",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "TextArray",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "913f23a9f99a14323d9f897aafda41e5dcd1fe77d742551f0a56da623c8a15e9"
+}

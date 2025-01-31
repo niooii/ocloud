@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT * FROM sfiles\n            WHERE full_path = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "media_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "is_dir",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "full_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "path_parts",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "modified_at",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "fa4651e2b8caed7b78d29ad94f2cb3fed7f9d1a73d123d04aa1fb9abba6d80df"
+}

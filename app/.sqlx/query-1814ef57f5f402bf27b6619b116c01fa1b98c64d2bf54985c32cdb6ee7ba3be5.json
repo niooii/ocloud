@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT * FROM media\n                WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "uploaded_time",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "accessed_time",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "expiring_time",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "file_size",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "file_hash",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1814ef57f5f402bf27b6619b116c01fa1b98c64d2bf54985c32cdb6ee7ba3be5"
+}

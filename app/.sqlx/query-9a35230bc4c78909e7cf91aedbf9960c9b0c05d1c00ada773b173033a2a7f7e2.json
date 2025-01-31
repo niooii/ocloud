@@ -1,0 +1,56 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media (\n                        uploaded_time,\n                        accessed_time,\n                        expiring_time,\n                        file_size,\n                        file_hash\n                    )\n                    VALUES ($1, $2, $3, $4, $5)\n                    RETURNING *",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "uploaded_time",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "accessed_time",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "expiring_time",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "file_size",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "file_hash",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9a35230bc4c78909e7cf91aedbf9960c9b0c05d1c00ada773b173033a2a7f7e2"
+}

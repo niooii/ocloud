@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM media\n                WHERE id = $1\n                RETURNING *",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "uploaded_time",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "accessed_time",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "expiring_time",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "file_size",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "file_hash",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1c913820dc9bf067059ec856694b00bfccd4245b626862f74665688c7ac4b358"
+}

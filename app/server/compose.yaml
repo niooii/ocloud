@@ -2,12 +2,10 @@ services:
   db:
     container_name: ocloud-db
     image: postgres:16
-    env_file:
-      - .env
     restart: always
     environment:
       POSTGRES_USER: niooi
-      POSTGRES_PASSWORD: ${POSTGRES_PASS}
+      POSTGRES_PASSWORD: abcde
       POSTGRES_DB: postgres
     ports:
       - 127.0.0.1:9432:5432

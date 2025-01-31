@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT media_id FROM sfiles\n                WHERE full_path = $1 AND is_dir = false",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "media_id",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "67a2b6996a800961f7a9fda9b8275efd63a851ff4a4ae758f2dfe6dc9b2398f0"
+}
