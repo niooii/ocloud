@@ -6,6 +6,8 @@ use tower_http::cors::CorsLayer;
 use crate::storage::controller::StorageController;
 use crate::handlers::media;
 
+use super::handlers::auth;
+
 pub async fn routes(controller: StorageController) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(tower_http::cors::Any)
@@ -18,6 +20,7 @@ pub async fn routes(controller: StorageController) -> Router {
 
     Router::new()
         .nest("/", media::routes(controller))
+        .nest("/", auth::routes())
         .route("/ping", get(ping))
         .layer(cors)
 }
