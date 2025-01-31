@@ -11,7 +11,7 @@ use sqlx::PgPool;
 use tokio::{net::TcpListener, sync::RwLock};
 use config::SERVER_CONFIG;
 
-async fn run() {
+pub async fn run(host: &str, port: u16) {
     dotenvy::dotenv().expect("Failed to get env variables from .env");
 
     // Create file save directory if it doesn't exist already
@@ -30,7 +30,9 @@ async fn run() {
         .nest("", routes::routes(mc).await)
         .layer(middleware::map_response(main_response_mapper));
 
-    let listener = TcpListener::bind("127.0.0.1:9101").await.unwrap();
+    let listener = TcpListener::bind(
+        format!("{}:{}", host, port)
+    ).await.unwrap();
 
     println!("Initialization complete..");
     serve(listener, routes.into_make_service()).await.expect("Failed to start listening");

@@ -2,16 +2,32 @@
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { TestApi } from "@/lib/api/test"
 import { useEffect, useState } from "react"
 
 export default function LandingForm() {
     const [urlValue, setUrlValue] = useState("")
 
-    const handleURLSubmission = () => {
+    const handleURLSubmission = async () => {
         if (urlValue) {
             console.log("Submitting URL:", urlValue)
             const cleanUrl = urlValue.replace(/\/$/, '');
             localStorage.setItem("OCLOUD_URL", cleanUrl);
+        }
+
+        try {
+            let test = new TestApi();
+            const res = await test.ping();
+
+            if (res === "pong...?") {
+                return true;
+            } else {
+                return false;
+            }
+        } 
+        catch (e) {
+            console.error("Error during ping: ", e);
+            return false;
         }
     }
 
@@ -35,7 +51,14 @@ export default function LandingForm() {
             }`}
             variant="outline"
             type="submit"
-            onClick={(_e) => handleURLSubmission()}
+            onClick={(_e) => handleURLSubmission().then(pinged => {
+                if (pinged) {
+                    console.log("ping success.. url is valid");
+                } else {
+                    console.log("ping failed.. bad url");
+                }
+            })
+            .catch(e => console.log("err: " + e))}
         > 
             Enter..
         </Button>

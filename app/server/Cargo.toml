@@ -22,3 +22,4 @@ strum_macros = "0.26.4"
 tokio = { version = "1.40.0", features = ["full"] }
 tokio-util = { version = "0.7.12", features = ["io"] }
 config = { path = "../config" }
+tower-http = { version = "0.6.2", features = ["cors"] }

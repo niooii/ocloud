@@ -39,11 +39,11 @@ enum Commands {
     /// Host the cloud with the given parameters.
     Server {
         /// The host to use when starting the server.
-        #[arg(short = 'h', long = "host", default_value="0.0.0.0")]
+        #[arg(short = 'H', long = "host", default_value="0.0.0.0")]
         host: String,
         /// The port to use when starting the server.
         #[arg(short = 'p', long = "port", default_value="443")]
-        port: String 
+        port: u16 
     }
 }
 
@@ -71,7 +71,9 @@ async fn main() -> Result<()> {
 
             println!("Done.");
         },
-        _ => {}
+        Commands::Server { host, port } => {
+            server::run(&host, port).await;
+        }
     }
     
     Ok(())
