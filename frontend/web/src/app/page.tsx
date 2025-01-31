@@ -24,21 +24,21 @@ export default function Home() {
         <LandingForm/>
       </main>
       <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        {/* <Link
+        <Link
           className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="/files"
+          href="https://github.com/niooii/ocloud"
           target="_blank"
           rel="noopener noreferrer"
         >
           <Image
             aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+            src="/github.svg"
+            alt="Git icon"
+            width={30}
+            height={30}
           />
-          Files
-        </Link> */}
+          Github
+        </Link>
       </footer>
     </div>
   );
