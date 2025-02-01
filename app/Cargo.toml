@@ -12,9 +12,6 @@ include = [
     "migrations/**/*",
 ]
 
-# [[bin]]
-# name = "ocloud"
-
 [dependencies]
 anyhow = "1.0.91"
 arboard = "3.4.1"
