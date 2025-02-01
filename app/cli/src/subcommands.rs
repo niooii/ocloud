@@ -5,7 +5,7 @@ use url::Url;
 
 #[derive(Subcommand, Debug)]
 pub enum SubCommand {
-    /// Upload files to the cloud.
+    /// Upload files to oCloud.
     Upload { 
         path: PathBuf,
         /// Preserve the directory structure relative to the cwd when uploading.
@@ -18,13 +18,15 @@ pub enum SubCommand {
         #[arg(short = 'd', long = "dir", default_value = "")]
         dir: String,
     },
-    /// Set the cloud's base url.
+    /// Set the base url of the server to use.
     SetUrl { url: Url },
-    /// Host the cloud with the given parameters.
+    /// Manage or run the oCloud server.
     Server {
         #[command(subcommand)]
         command: ServerCommand
-    }
+    },
+    /// Print the paths that oCloud uses.
+    Paths
 }
 
 #[derive(Subcommand, Debug)]

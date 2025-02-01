@@ -8,7 +8,7 @@ use arboard::Clipboard;
 use reqwest::Url;
 use clap::{Parser, Subcommand};
 use error::Result;
-use config::{Config, CLI_CONFIG};
+use config::{Config, CLI_CONFIG, CONFIG_DIR, DATA_DIR};
 use subcommands::SubCommand;
 
 // Used for making config folders etc
@@ -47,6 +47,10 @@ async fn main() -> Result<()> {
         },
         SubCommand::Server { command } => {
             commands::server::handler(command).await?;
+        },
+        SubCommand::Paths => {
+            println!("Config files: {}", CONFIG_DIR.to_string_lossy());
+            println!("Media and other data: {}", DATA_DIR.to_string_lossy());
         }
     }
     
