@@ -3,7 +3,6 @@ use crate::error::{Error, Result};
 use std::{ffi::{OsStr, OsString}, path::Path};
 use config::CLI_CONFIG;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
-use tokio::{fs::{read, File}, io::AsyncReadExt};
 use reqwest::{multipart::{Form, Part}, Body, Client, StatusCode, Url};
 use tokio_util::{bytes::Bytes, io::ReaderStream};
 use futures_util::{stream::StreamExt, Stream};
@@ -18,7 +17,7 @@ pub async fn handler(path: PathBuf, preserve: bool, dir: String) -> Result<Strin
     let upload_dir = PathBuf::from(
         format!(
             "root/{}",
-            dir.trim_matches('/').to_string()
+            dir.trim_matches('/')
         )
     );
 

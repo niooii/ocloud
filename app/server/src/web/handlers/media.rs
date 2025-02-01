@@ -42,7 +42,7 @@ pub async fn upload_media(
         let name: String = field.name().expect("File has no name??").to_string();
         println!("Got file: {name}");
         println!("for path: {}", path.to_string());
-
+        
         if path.to_string_with_trailing().is_empty() {
             path = VirtualPath::root();
         }

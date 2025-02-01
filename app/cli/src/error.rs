@@ -20,7 +20,7 @@ impl From<std::io::Error> for Error {
 
 impl From<reqwest::Error> for Error {
     fn from(value: reqwest::Error) -> Self {
-        Self::ReqwestError { err: value.into() }
+        Self::ReqwestError { err: value }
     }
 }
 
