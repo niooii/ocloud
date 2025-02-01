@@ -1,3 +1,7 @@
+# NOTE
+DO NOT install this.  
+This is actively being worked on, and I published it to make sure it compiles correctly  
+
 # Environment
 Rename `example.env` -> `.env`, then fill out the variables accordingly.
 
