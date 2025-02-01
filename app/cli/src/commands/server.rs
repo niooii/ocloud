@@ -19,7 +19,7 @@ pub async fn handler(command: ServerCommand) -> Result<()> {
         ServerCommand::Wipe => {
             let proceed = Confirm::new("All saved data will be wiped. Continue?")
                 .with_default(false)
-                .with_help_message("This is destructive action and CANNOT be undone.")
+                .with_help_message("This is a destructive action and CANNOT be undone.")
                 .prompt()
                 .unwrap_or(false);
             
