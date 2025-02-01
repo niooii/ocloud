@@ -10,7 +10,7 @@ clap = { version = "4.5.20", features = ["derive"] }
 dirs = "5.0.1"
 reqwest = { version = "0.12.8", features = ["multipart", "stream"] }
 serde = { version = "1.0.213", features = ["derive"] }
-tokio = { version = "1.41.0", features = ["full"] }
+tokio = { workspace = true }
 tqdm = "0.7.0"
 async-stream = "0.3.6"
 tokio-util = { version = "0.7.13", features = ["full"] }
@@ -19,7 +19,7 @@ indicatif = "0.17.9"
 rustyline = "15.0.0"
 lazy_static = "1.5.0"
 url = "2.5.4"
-config = { path = "../config" }
-server = { path = "../server" }
+config = { version = "0.1.0", path = "../config" }
+server = { version = "0.1.0", path = "../server" }
 bollard = "0.18.1"
 inquire = "0.7.5"

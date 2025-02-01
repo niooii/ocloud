@@ -19,7 +19,7 @@ serde_json = "1.0.128"
 sha2 = "0.10.8"
 sqlx = {version = "0.8.3", features = [ "runtime-tokio-native-tls", "postgres", "macros" ] }
 strum_macros = "0.26.4"
-tokio = { version = "1.40.0", features = ["full"] }
+tokio = { workspace = true }
 tokio-util = { version = "0.7.12", features = ["io"] }
 config = { path = "../config" }
 tower-http = { version = "0.6.2", features = ["cors"] }

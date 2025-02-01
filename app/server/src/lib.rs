@@ -28,7 +28,7 @@ pub async fn run(host: &str, port: u16) -> Result<()> {
 
     let db_pool = PgPool::connect(&db_url).await?;
 
-    sqlx::migrate!("./migrations").run(&db_pool).await
+    sqlx::migrate!("../migrations").run(&db_pool).await
         .expect("Failed to run migrations.");
 
     let mc = Arc::new(FileControllerInner::new(db_pool).await);
