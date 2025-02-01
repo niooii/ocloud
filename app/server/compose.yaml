@@ -4,9 +4,9 @@ services:
     image: postgres:16
     restart: always
     environment:
-      POSTGRES_USER: niooi
-      POSTGRES_PASSWORD: abcde
-      POSTGRES_DB: postgres
+      POSTGRES_USER: IN_ENV
+      POSTGRES_PASSWORD: IN_ENV
+      POSTGRES_DB: IN_ENV
     ports:
       - 127.0.0.1:9432:5432
     volumes:

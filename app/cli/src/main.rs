@@ -3,10 +3,8 @@ mod commands;
 mod error;
 mod subcommands;
 
-use std::{path::{Path, PathBuf}, process::exit, str::FromStr};
-use arboard::Clipboard;
-use reqwest::Url;
-use clap::{Parser, Subcommand};
+use std::process::exit;
+use clap::Parser;
 use error::Result;
 use config::{Config, CLI_CONFIG, CONFIG_DIR, DATA_DIR};
 use subcommands::SubCommand;

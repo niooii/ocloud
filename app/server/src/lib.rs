@@ -23,6 +23,7 @@ pub async fn init() -> Result<()> {
 
 pub async fn run(host: &str, port: u16) -> Result<()> {
     init().await?;
+
     let db_url = SERVER_CONFIG.postgres_config.to_url();
 
     let db_pool = PgPool::connect(&db_url).await?;
@@ -40,7 +41,7 @@ pub async fn run(host: &str, port: u16) -> Result<()> {
         format!("{host}:{port}")
     ).await?;
 
-    println!("Initialization complete..");
+    println!("Listening on {host}:{port}");
     serve(listener, routes.into_make_service()).await?;
     Ok(())
 }

@@ -1,9 +1,9 @@
-use std::{path::PathBuf, process::exit};
+use std::path::PathBuf;
 use crate::error::{Error, Result};
-use std::{ffi::{OsStr, OsString}, path::Path};
+use std::path::Path;
 use config::CLI_CONFIG;
-use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
-use reqwest::{multipart::{Form, Part}, Body, Client, StatusCode, Url};
+use indicatif::{ProgressBar, ProgressStyle};
+use reqwest::{multipart::{Form, Part}, Body, Client, Url};
 use tokio_util::{bytes::Bytes, io::ReaderStream};
 use futures_util::{stream::StreamExt, Stream};
 

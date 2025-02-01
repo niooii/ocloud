@@ -30,20 +30,22 @@ pub struct FileControllerInner {
 }
 
 impl FileControllerInner {
+    pub async fn create_root(&self) {
+        if let Err(e) = self.make_dir(&VirtualPath::root(), None).await {
+            match e {
+                Error::PathAlreadyExists => {},
+                _ => panic!("Failed to create root content directory.")
+            }
+        } 
+    }
+
     pub async fn new(db_pool: PgPool) -> Self {
         let fc = Self {
             db_pool,
             active_uploads: Arc::new(KeyMutex::new())
         };
 
-        if let Err(e) = fc.make_dir(&VirtualPath::root(), None).await {
-            match e {
-                Error::PathAlreadyExists => println!("Root content directory exists."),
-                _ => panic!("Failed to create root content directory.")
-            }
-        } else {
-            println!("Created root content directory.")
-        }
+        fc.create_root().await;
 
         fc
     }
@@ -154,6 +156,8 @@ impl FileControllerInner {
     
         fs::remove_dir_all(&SERVER_CONFIG.files_dir).await?;
         fs::create_dir(&SERVER_CONFIG.files_dir).await?;
+
+        self.create_root().await;
 
         Ok(())
     }

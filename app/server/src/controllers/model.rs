@@ -183,6 +183,10 @@ impl VirtualPath {
     pub fn to_string_with_trailing(&self) -> String {
         self.path.as_os_str().to_string_lossy().into_owned()
     }
+
+    pub fn is_root(&self) -> bool {
+        self.path.to_string_lossy() == "root/"
+    } 
 }
 
 impl<'de> Deserialize<'de> for VirtualPath {

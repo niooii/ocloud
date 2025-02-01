@@ -1,4 +1,4 @@
-use reqwest::{StatusCode, Url};
+use reqwest::StatusCode;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
