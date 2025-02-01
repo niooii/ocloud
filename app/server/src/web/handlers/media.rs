@@ -67,13 +67,13 @@ pub async fn upload_media(
             
             file.write_all(&chunk).await.map_err(|e| Error::IOError { why: e.to_string() } )?;
             file_size += chunk.len() as i64;
-            hasher.write(&chunk).expect("Failed to hash shit");
+            hasher.write_all(&chunk).expect("Failed to hash shit");
         }
 
 	    file.flush().await.expect("Bluh flushing file failed");
 
         let hash = hasher.finalize();
-        let file_hash: String = format!("{:X}", hash);  
+        let file_hash: String = format!("{hash:X}");  
         
         let info = FileUploadInfo {
             file_name: name,
