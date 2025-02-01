@@ -1,11 +1,15 @@
 use inquire::Confirm;
 
+use crate::docker::start_pg_container;
 use crate::server;
 use crate::subcommands::{DbCommand, ServerCommand};
 use crate::error::CliResult;
 
 async fn db_handler(command: DbCommand) -> CliResult<()> {
-
+    match command {
+        DbCommand::Start => start_pg_container().await?,
+        DbCommand::Stop => todo!(),
+    }
     Ok(())
 }
 

@@ -24,7 +24,7 @@ pub async fn init() -> ServerResult<()> {
 pub async fn run(host: &str, port: u16) -> ServerResult<()> {
     init().await?;
 
-    let db_url = SERVER_CONFIG.postgres_config.to_url();
+    let db_url = SERVER_CONFIG.postgres.to_url();
 
     let db_pool = PgPool::connect(&db_url).await?;
 
@@ -69,7 +69,7 @@ async fn main_response_mapper(res: Response) -> Response {
 
 pub async fn file_controller() -> ServerResult<FileController> {
     init().await?;
-    let db_url = SERVER_CONFIG.postgres_config.to_url();
+    let db_url = SERVER_CONFIG.postgres.to_url();
 
     let db_pool = PgPool::connect(&db_url).await?;
 
