@@ -29,6 +29,19 @@ impl Default for PostgresConfig {
     }
 }
 
+impl PostgresConfig {
+    pub fn to_url(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}/{}",
+            self.user,
+            self.pass,
+            self.host,
+            self.port,
+            self.database
+        )
+    }
+}
+
 #[derive(Deserialize, Serialize, Clone)]
 pub struct ServerConfig {
     pub data_dir: PathBuf,
