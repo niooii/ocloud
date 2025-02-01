@@ -1,12 +1,12 @@
-use std::path::Path;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::util;
-use crate::Config;
-use crate::Result;
-use crate::DATA_DIR;
+use super::util;
+use super::Config;
+use super::Result;
+use super::Error;
+use super::DATA_DIR;
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct PostgresConfig {
@@ -68,7 +68,7 @@ impl Config for ServerConfig {
         let res = util::read_toml::<Self>(path);
         if let Err(e) = res {
             match e {
-                crate::Error::FileReadError => {
+                Error::FileReadError => {
                     let default = Self::default();
                     default.save()?;
                     return Ok(default);

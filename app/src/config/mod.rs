@@ -72,6 +72,9 @@ where T: Config + Default {
     }
 }
 
+// Used for making config folders etc
+pub const PROGRAM_NAME: &str = "ocloud";
+
 lazy_static! {
     pub static ref CLI_CONFIG: CliConfig = {
         parse_or_prompt("CLI")
@@ -80,10 +83,10 @@ lazy_static! {
         parse_or_prompt("server")
     };
     pub static ref CONFIG_DIR: PathBuf = {
-        dirs::config_dir().unwrap_or_default().join("ocloud")
+        dirs::config_dir().unwrap_or_default().join(PROGRAM_NAME)
     };
     pub static ref DATA_DIR: PathBuf = {
-        dirs::data_dir().unwrap_or_default().join("ocloud")
+        dirs::data_dir().unwrap_or_default().join(PROGRAM_NAME)
     };
 }
 

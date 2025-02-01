@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM sfiles",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "f876ed3e26dbf440295f7900754b997c6720de8a6a1dfbbd67fbe9cce12a76f5"
+}

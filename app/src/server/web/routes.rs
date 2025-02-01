@@ -3,8 +3,8 @@ use axum::routing::get;
 use axum::Router;
 use tower_http::cors::CorsLayer;
 
-use crate::controllers::files::FileController;
-use crate::handlers::media;
+use crate::server::controllers::files::FileController;
+use super::handlers::media;
 
 use super::handlers::auth;
 

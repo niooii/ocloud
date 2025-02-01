@@ -1,13 +1,12 @@
 use std::path::PathBuf;
-use crate::error::{Error, Result};
+use crate::{config::CLI_CONFIG, error::{CliError, CliResult}};
 use std::path::Path;
-use config::CLI_CONFIG;
 use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::{multipart::{Form, Part}, Body, Client, Url};
 use tokio_util::{bytes::Bytes, io::ReaderStream};
 use futures_util::{stream::StreamExt, Stream};
 
-pub async fn handler(path: PathBuf, preserve: bool, dir: String) -> Result<String> {
+pub async fn handler(path: PathBuf, preserve: bool, dir: String) -> CliResult<String> {
     if let Err(e) = Url::parse(&CLI_CONFIG.server_url) {
         eprintln!("Error: cloud url is invalid or does not exist.");
         eprintln!("Use the set-url command to set a cloud url.");
@@ -34,7 +33,7 @@ pub async fn handler(path: PathBuf, preserve: bool, dir: String) -> Result<Strin
     upload_file(&upload_path, &path).await
 }
 
-pub async fn upload_file(upload_path: &Path, file_path: &Path) -> Result<String> {
+pub async fn upload_file(upload_path: &Path, file_path: &Path) -> CliResult<String> {
     println!("Uploading {:?}...", file_path.file_name().unwrap_or_default());
 
     let client = Client::new();
@@ -57,7 +56,7 @@ pub async fn upload_file(upload_path: &Path, file_path: &Path) -> Result<String>
         .send().await?;
 
     if !res.status().is_success() {
-        return Err(Error::FailStatusCode { status_code: res.status() });
+        return Err(CliError::FailStatusCode { status_code: res.status() });
     }
 
     let media_endpoint = res.text().await?.to_string();
@@ -66,7 +65,7 @@ pub async fn upload_file(upload_path: &Path, file_path: &Path) -> Result<String>
 }
 
 pub async fn upload_stream(path: &Path) 
-    -> Result<impl Stream<Item = std::result::Result<Bytes, std::io::Error>>> {
+    -> CliResult<impl Stream<Item = std::result::Result<Bytes, std::io::Error>>> {
     let file = tokio::fs::File::open(path)
         .await?;
     let size = file.metadata().await?.len();

@@ -1,12 +1,12 @@
 use std::{io::Write, path::PathBuf, sync::{Arc, Mutex}, time::{SystemTime, UNIX_EPOCH}};
 use axum::{body::Body, extract::{DefaultBodyLimit, Multipart, Path, Query, State}, http::{header, HeaderValue}, response::Response, routing::get, Json, Router};
-use config::SERVER_CONFIG;
+use crate::config::SERVER_CONFIG;
 use tokio::{fs::File, io::AsyncWriteExt, sync::Notify};
 use sha2::{Digest, Sha256};
 use tokio::fs;
 
-use crate::{error::Error, controllers::{files::{FileController}, model::{FileUploadInfo, Media, VirtualPath}}};
-use crate::error::Result;
+use crate::{server::controllers::{files::{FileController}, model::{FileUploadInfo, Media, VirtualPath}}};
+use crate::server::error::{ServerError, ServerResult};
 
 pub fn routes(controller: FileController) -> Router {
     Router::new()
@@ -29,12 +29,12 @@ pub async fn upload_media(
     State(files): State<FileController>, 
     Path(mut path): Path<VirtualPath>,
     mut multipart: Multipart
-) -> Result<String> {
+) -> ServerResult<String> {
     path.err_if_file()?;
 
     // Write the first field to the disk, ignore other fields.
     if let Some(mut field) = multipart.next_field().await
-    .map_err(|e| Error::AxumError { why: format!("Multipart error: {}", e.body_text()) })? {
+    .map_err(|e| ServerError::AxumError { why: format!("Multipart error: {}", e.body_text()) })? {
         
         let save_dir = &SERVER_CONFIG.files_dir;
         
@@ -59,13 +59,13 @@ pub async fn upload_media(
         );
 
 	    let mut file: File = File::create(&temp_path).await
-            .map_err(|e| Error::IOError { why: e.to_string() } )?;
+            .map_err(|e| ServerError::IOError { why: e.to_string() } )?;
         // i64 type because postgres doesnt support unsigned gg
         let mut file_size: i64 = 0;
         while let Some(chunk) = field.chunk().await
-            .map_err(|e| Error::AxumError { why: format!("Chunk error: {}", e.body_text()) })? {
+            .map_err(|e| ServerError::AxumError { why: format!("Chunk error: {}", e.body_text()) })? {
             
-            file.write_all(&chunk).await.map_err(|e| Error::IOError { why: e.to_string() } )?;
+            file.write_all(&chunk).await.map_err(|e| ServerError::IOError { why: e.to_string() } )?;
             file_size += chunk.len() as i64;
             hasher.write_all(&chunk).expect("Failed to hash shit");
         }
@@ -109,14 +109,14 @@ pub async fn upload_media(
         Ok(vpathstr?)
     } else {
         // There were no fields.
-        Err(Error::Error { why: "No content uploaded".to_string() })
+        Err(ServerError::Error { why: "No content uploaded".to_string() })
     }
 }
 
 pub async fn get_media(
     Path(path): Path<VirtualPath>,
     State(files): State<FileController>,
-) -> Result<Response> {
+) -> ServerResult<Response> {
     println!("HEHEHAW {}", path.to_string_with_trailing());
     if !path.is_dir() {
         let media: Media = files.get_media(&path).await?;
@@ -141,7 +141,7 @@ pub async fn get_media(
             header::CONTENT_DISPOSITION,
             HeaderValue::from_str(
                 &format!("inline; filename=\"{}\"", file_name)
-            ).map_err(|_e| Error::Error { why: "Parse error".to_string() })?
+            ).map_err(|_e| ServerError::Error { why: "Parse error".to_string() })?
         );
 
         res.headers_mut().append(
@@ -152,7 +152,7 @@ pub async fn get_media(
         Ok(res)
     } else {
         let list = files.list_dir(&path).await?
-            .ok_or(Error::PathDoesntExist)?;
+            .ok_or(ServerError::PathDoesntExist)?;
         Ok(Response::new(Body::from(serde_json::to_string(&list)?)))
     }
 
@@ -161,7 +161,7 @@ pub async fn get_media(
 pub async fn delete_media(
     State(files): State<FileController>,
     Path(path): Path<VirtualPath>,
-) -> Result<()> {
+) -> ServerResult<()> {
     files.delete_sfile(&path).await?;
     
     Ok(())

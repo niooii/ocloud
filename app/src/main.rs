@@ -2,15 +2,14 @@ mod api;
 mod commands;
 mod error;
 mod subcommands;
+mod config;
+mod server;
 
 use std::process::exit;
 use clap::Parser;
-use error::Result;
+use error::CliResult;
 use config::{Config, CLI_CONFIG, CONFIG_DIR, DATA_DIR};
 use subcommands::SubCommand;
-
-// Used for making config folders etc
-pub const PROGRAM_NAME: &str = "ocloud";
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -20,7 +19,7 @@ struct Cli {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> CliResult<()> {
     let cli = Cli::parse();
 
     config::init();

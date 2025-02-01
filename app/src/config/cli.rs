@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::util;
-use crate::Config;
-use crate::Result;
+use super::util;
+use super::Config;
+use super::Result;
+use super::Error;
 
 #[derive(Deserialize, Serialize, Default, Clone)]
 pub struct CliConfig {
@@ -16,7 +17,7 @@ impl Config for CliConfig {
         let res = util::read_toml::<Self>(path);
         if let Err(e) = res {
             match e {
-                crate::Error::FileReadError => {
+                Error::FileReadError => {
                     let default = Self::default();
                     default.save()?;
                     return Ok(default);

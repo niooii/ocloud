@@ -1,5 +1,4 @@
 use std::{future::Future, path::{Path, PathBuf}, pin::Pin};
-use config::SERVER_CONFIG;
 use serde::de::Error as err;
 use axum::extract::multipart::Field;
 use futures::{Stream, StreamExt};
@@ -9,7 +8,7 @@ use sqlx::{prelude::FromRow, PgPool};
 use tokio::{fs::File, io::{AsyncRead, AsyncReadExt}};
 use bytes::Bytes;
 use tokio_util::io::ReaderStream;
-use crate::error::{Error, Result};
+use crate::{config::SERVER_CONFIG, error::{CliError}, server::error::{ServerError, ServerResult}};
 
 use super::{files::FileController};
 
@@ -47,17 +46,17 @@ impl Media {
     }
 
     // Get a ReaderStream from the file, or an Err if it doesn't exist.
-    pub async fn reader_stream(&self) -> Result<ReaderStream<File>> {
+    pub async fn reader_stream(&self) -> ServerResult<ReaderStream<File>> {
         let file = File::open(&self.true_path().await)
-            .await.map_err(|e| Error::IOError { why: e.to_string() })?;
+            .await.map_err(|e| ServerError::IOError { why: e.to_string() })?;
 
         Ok(ReaderStream::new(file))
     }
 
     // Attempts to delete the underlying file from the disk.
-    pub async fn delete_from_disk(&self) -> Result<()> {
+    pub async fn delete_from_disk(&self) -> ServerResult<()> {
         Ok(tokio::fs::remove_file(self.true_path().await.as_path()).await
-            .map_err(|e| Error::IOError { why: e.to_string() })?)
+            .map_err(|e| ServerError::IOError { why: e.to_string() })?)
     }
 }
 
@@ -141,24 +140,24 @@ impl VirtualPath {
         self.is_dir
     }
 
-    pub fn err_if_dir(&self) -> Result<()> {
+    pub fn err_if_dir(&self) -> ServerResult<()> {
         if self.is_dir() {
-            Err(Error::Error { why: "Bad path: did not expect directory".to_string() })
+            Err(ServerError::Error { why: "Bad path: did not expect directory".to_string() })
         } else {
             Ok(())
         }
     }
 
-    pub fn err_if_file(&self) -> Result<()> {
+    pub fn err_if_file(&self) -> ServerResult<()> {
         if !self.is_dir() {
-            Err(Error::Error { why: "Bad path: did not expect file".to_string() })
+            Err(ServerError::Error { why: "Bad path: did not expect file".to_string() })
         } else {
             Ok(())
         }
     }
 
     /// Only pushes if the path is currently a directory
-    pub fn push_file(&mut self, file_name: String) -> Result<()> {
+    pub fn push_file(&mut self, file_name: String) -> ServerResult<()> {
         self.err_if_file()?;
         self.path.push(file_name);
         self.is_dir = false;
@@ -167,7 +166,7 @@ impl VirtualPath {
 
     /// Only pushes if the path is currently a directory
     /// dir_name should not contain a trailing slash
-    pub fn push_dir(&mut self, dir_name: String) -> Result<()> {
+    pub fn push_dir(&mut self, dir_name: String) -> ServerResult<()> {
         self.err_if_file()?;
         self.path.push(
             format!("{dir_name}/")
@@ -195,7 +194,7 @@ impl<'de> Deserialize<'de> for VirtualPath {
         D: serde::Deserializer<'de> {
         let val = String::deserialize(deserializer)?;
         if !val.starts_with("root/") {
-            return Err(Error::Error { why: "Path should start with 'root/'.".into() })
+            return Err(ServerError::Error { why: "Path should start with 'root/'.".into() })
                 .map_err(D::Error::custom);
         }
         Ok(

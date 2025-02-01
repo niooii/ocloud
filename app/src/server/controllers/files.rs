@@ -1,15 +1,15 @@
 use std::{collections::HashMap, path::{Path, PathBuf}, sync::{Arc, Mutex}, time::{SystemTime, UNIX_EPOCH}};
 
-use config::SERVER_CONFIG;
 use sqlx::query;
 use sqlx::query_as;
-use crate::{error::Result, controllers::{model::{FileUploadInfo, Media, SFileRow}}, Error};
 use serde::{Serialize, Deserialize};
 use sqlx::{postgres::{PgArguments, PgQueryResult, PgRow}, query::{Query}, FromRow, PgPool, Postgres, Row, Transaction};
 use tokio::{fs, sync::{Notify, RwLock}};
 use key_mutex::tokio::KeyMutex;
 
-use super::{model::{SFile, VirtualPath}};
+use crate::{config::SERVER_CONFIG, server::{controllers::model::SFileRow, error::{ServerError, ServerResult}}};
+
+use super::model::{FileUploadInfo, Media, SFile, VirtualPath};
 
 pub enum SFileCreateInfo<'a> {
     Dir {
@@ -33,7 +33,7 @@ impl FileControllerInner {
     pub async fn create_root(&self) {
         if let Err(e) = self.make_dir(&VirtualPath::root(), None).await {
             match e {
-                Error::PathAlreadyExists => {},
+                ServerError::PathAlreadyExists => {},
                 _ => panic!("Failed to create root content directory.")
             }
         } 
@@ -52,7 +52,7 @@ impl FileControllerInner {
 }
 
 impl FileControllerInner {
-    pub async fn finish_upload(&self, mut info: FileUploadInfo) -> Result<String> {
+    pub async fn finish_upload(&self, mut info: FileUploadInfo) -> ServerResult<String> {
         let mut tx = self.db_pool.begin().await?;
         info.vpath.push_file(info.file_name)?;
         // stage 1: insert into media table if it doesnt exist
@@ -96,7 +96,7 @@ impl FileControllerInner {
         if is_duplicate {
             // dont matter if this fails or not ngl
             let _ = fs::remove_file(&info.temp_path).await
-                .map_err(|e| Error::IOError { why: e.to_string() });
+                .map_err(|e| ServerError::IOError { why: e.to_string() });
             println!("Removed duplicate file");
         } else {
             // No duplicate
@@ -108,7 +108,7 @@ impl FileControllerInner {
             fs::rename(
                 info.temp_path.as_path(), 
                 true_path.as_path()
-            ).await.map_err(|e| Error::IOError { why: e.to_string() })?;
+            ).await.map_err(|e| ServerError::IOError { why: e.to_string() })?;
             
             println!("Finalized filename..");  
         }
@@ -126,7 +126,7 @@ impl FileControllerInner {
         Ok(vpath.to_string())
     }
 
-    pub async fn get_media(&self, vpath: &VirtualPath) -> Result<Media> {
+    pub async fn get_media(&self, vpath: &VirtualPath) -> ServerResult<Media> {
         Ok(
             query_as!(
                 Media,
@@ -135,12 +135,12 @@ impl FileControllerInner {
                 self.get_media_id(vpath).await?,
             )
             .fetch_optional(&self.db_pool).await?
-            .ok_or_else(|| Error::NoMediaFound)?
+            .ok_or_else(|| ServerError::NoMediaFound)?
         )
     }
 
     /// Wipes all the files stored. Very destructive.
-    pub async fn wipe(&self) -> Result<()> {
+    pub async fn wipe(&self) -> ServerResult<()> {
         let mut tx = self.db_pool.begin().await?;
         
         query!(
@@ -162,18 +162,18 @@ impl FileControllerInner {
         Ok(())
     }
 
-    pub async fn all_files(&self) -> Result<Vec<SFile>> {
+    pub async fn all_files(&self) -> ServerResult<Vec<SFile>> {
         query_as!(
             SFileRow,
             r#"SELECT * FROM sfiles"#
         ).fetch_all(&self.db_pool).await
-        .map_err(Error::from)
+        .map_err(ServerError::from)
         .map(|rows| rows.into_iter().map(SFile::from).collect())
     }
 
     // Deletes the symbolic file, aka the 'pointer' to the media.
     // Also will delete the media if there are no more references to it
-    pub async fn delete_sfile(&self, vpath: &VirtualPath) -> Result<()> {
+    pub async fn delete_sfile(&self, vpath: &VirtualPath) -> ServerResult<()> {
         vpath.err_if_dir()?;
 
         let full_path = vpath.to_string();
@@ -188,7 +188,7 @@ impl FileControllerInner {
         ).fetch_optional(&mut *tx)  
         .await?
         .map(|row| row.media_id)
-        .ok_or(Error::NoMediaFound)?;
+        .ok_or(ServerError::NoMediaFound)?;
         
         let has_remaining_refs = query!(
             r"SELECT 1 AS exists FROM sfiles 
@@ -218,15 +218,15 @@ impl FileControllerInner {
         Ok(())
     }
 
-    // Returns the virtual path inserted into the database, in rare cases
-    // it could be different.
-    // If a transaction is passed in but fails for whatever reason
-    // all the intermediate directories will still be created (not transacted).
+    /// Returns the virtual path inserted into the database, in rare cases
+    /// it could be different.
+    /// If a transaction is passed in but fails for whatever reason
+    /// all the intermediate directories will still be created (not transacted).
     async fn mk_sfile(
         &self, 
         info: SFileCreateInfo<'_>, 
         transaction: Option<&mut Transaction<'_, Postgres>>
-    ) -> Result<VirtualPath> {
+    ) -> ServerResult<VirtualPath> {
         let current_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -265,9 +265,9 @@ impl FileControllerInner {
             .and_then(|d| d.code())
             .map_or(false, |code| code == "23505");
             if unique_violation {
-                Error::PathAlreadyExists
+                ServerError::PathAlreadyExists
             } else {
-                Error::from(e)
+                ServerError::from(e)
             }
         })?;
 
@@ -279,7 +279,7 @@ impl FileControllerInner {
         vpath: &VirtualPath, 
         media_id: i64,
         transaction: Option<&mut Transaction<'_, Postgres>>
-    ) -> Result<VirtualPath> {
+    ) -> ServerResult<VirtualPath> {
         vpath.err_if_dir()?;
         self.make_all_dirs(vpath).await?;
         self.mk_sfile(
@@ -292,7 +292,7 @@ impl FileControllerInner {
         &self, 
         vpath: &VirtualPath, 
         transaction: Option<&mut Transaction<'_, Postgres>>
-    ) -> Result<VirtualPath> {
+    ) -> ServerResult<VirtualPath> {
         vpath.err_if_file()?;
         self.mk_sfile(
             SFileCreateInfo::Dir { path: vpath }, 
@@ -304,7 +304,7 @@ impl FileControllerInner {
         &self,
         vpath: &VirtualPath,
         
-    ) -> Result<Option<Vec<SFile>>> {
+    ) -> ServerResult<Option<Vec<SFile>>> {
         vpath.err_if_file()?;
         let parts = vpath.path_parts();
         // TODO! unsafe cast
@@ -326,7 +326,7 @@ impl FileControllerInner {
             depth + 1
         )
             .fetch_all(&mut *transaction).await
-            .map_err(Error::from)
+            .map_err(ServerError::from)
             .map(|v| Some(
                 v.iter().map(SFile::from).collect()
             ));
@@ -340,7 +340,7 @@ impl FileControllerInner {
     // just create up to the deepest parent.
     // Could do it in one query,
     // Also not adding a transacted variant since it shouldnt matter, and bad for concurrency
-    pub async fn make_all_dirs(&self, vpath: &VirtualPath) -> Result<()> {
+    pub async fn make_all_dirs(&self, vpath: &VirtualPath) -> ServerResult<()> {
         let mut parts = vpath.path_parts_no_root();
         if !vpath.is_dir() {
             parts.pop();
@@ -356,7 +356,7 @@ impl FileControllerInner {
 
             if let Err(e) = create_res {
                 match e {
-                    Error::PathAlreadyExists => continue,
+                    ServerError::PathAlreadyExists => continue,
                     _ => return Err(e) 
                 }
             }
@@ -368,7 +368,7 @@ impl FileControllerInner {
     pub async fn path_info(
         &self, 
         vpath: &VirtualPath
-    ) -> Result<Option<SFile>> {
+    ) -> ServerResult<Option<SFile>> {
         let full_path = vpath.to_string();
         query_as!(
             SFileRow,
@@ -376,7 +376,7 @@ impl FileControllerInner {
             WHERE full_path = $1",
             full_path
         ).fetch_optional(&self.db_pool).await
-            .map_err(Error::from)
+            .map_err(ServerError::from)
             // oh hell no
             .map(|opt| opt.map(SFile::from))
     }
@@ -385,7 +385,7 @@ impl FileControllerInner {
         &self, 
         vpath: &VirtualPath,
         transaction: &mut Transaction<'_, Postgres>
-    ) -> Result<Option<SFile>> {
+    ) -> ServerResult<Option<SFile>> {
         let full_path = vpath.to_string();
         query_as!(
             SFileRow,
@@ -393,11 +393,11 @@ impl FileControllerInner {
             WHERE full_path = $1",
             full_path
         ).fetch_optional(&mut **transaction).await
-            .map_err(Error::from)
+            .map_err(ServerError::from)
             .map(|opt| opt.map(SFile::from))
     }
 
-    pub async fn get_media_id(&self, vpath: &VirtualPath) -> Result<Option<i64>> {
+    pub async fn get_media_id(&self, vpath: &VirtualPath) -> ServerResult<Option<i64>> {
         vpath.err_if_dir()?;
         let full_path = vpath.to_string();
             query!(
@@ -405,7 +405,7 @@ impl FileControllerInner {
                 WHERE full_path = $1 AND is_dir = false",
                 full_path
             ).fetch_optional(&self.db_pool).await
-                .map_err(Error::from)
+                .map_err(ServerError::from)
                 .map(|opt| opt.map(|rec| rec.media_id.unwrap()))
     }
 

@@ -3,7 +3,7 @@
 use axum::{http::StatusCode, response::{IntoResponse, Response}};
 use serde::Serialize;
 use strum_macros::AsRefStr;
-use crate::error::Error;
+use crate::server;
 
 #[derive(Clone, Debug, AsRefStr, Serialize)]
 #[allow(non_camel_case_types)]
@@ -13,7 +13,7 @@ pub enum ClientError {
     INTERNAL_ERROR {why: String}
 }
 
-impl Error { 
+impl server::error::ServerError { 
     pub fn to_status_and_client_error(&self) -> (StatusCode, ClientError) {
         match self {    
             Self::NoAuthError => (
@@ -64,7 +64,7 @@ impl Error {
     }
 }               
 
-impl IntoResponse for Error {
+impl IntoResponse for server::error::ServerError {
     fn into_response(self) -> Response {
         let mut response = StatusCode::INTERNAL_SERVER_ERROR.into_response();
 

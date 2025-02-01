@@ -1,14 +1,15 @@
 use inquire::Confirm;
 
+use crate::server;
 use crate::subcommands::{DbCommand, ServerCommand};
-use crate::error::Result;
+use crate::error::CliResult;
 
-async fn db_handler(command: DbCommand) -> Result<()> {
+async fn db_handler(command: DbCommand) -> CliResult<()> {
 
     Ok(())
 }
 
-pub async fn handler(command: ServerCommand) -> Result<()> {
+pub async fn handler(command: ServerCommand) -> CliResult<()> {
     match command {
         ServerCommand::Run { host, port } => {
             server::run(&host, port).await?;
