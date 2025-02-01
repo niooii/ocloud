@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "Command line utilities for a self-hosted cloud"
 license = "MIT"
+repository = "https://github.com/niooii/ocloud"
 
 include = [
     "src/**/*",
