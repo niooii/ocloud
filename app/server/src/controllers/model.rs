@@ -11,7 +11,7 @@ use bytes::Bytes;
 use tokio_util::io::ReaderStream;
 use crate::error::{Error, Result};
 
-use super::{controller::StorageController};
+use super::{files::FileController};
 
 // A row from the database.
 #[derive(FromRow)]
@@ -36,7 +36,7 @@ impl Media {
     /// Storage path follows this format: 
     /// `save_dir/[first 2 chars of hash]/[next 2]/[rest of hash]`
     pub async fn true_path(&self) -> PathBuf {
-        let save_dir = &SERVER_CONFIG.data_dir;
+        let save_dir = &SERVER_CONFIG.files_dir;
 
         let hash = self.file_hash.clone();
         let first_dir = &hash[0..2];
@@ -63,6 +63,7 @@ impl Media {
 
 #[derive(Serialize)]
 pub struct SFile {
+    pub id: u64,
     pub is_dir: bool,
     pub full_path: String,
     pub created_at: i64,
@@ -85,20 +86,14 @@ pub struct SFileRow {
 
 impl From<SFileRow> for SFile {
     fn from(value: SFileRow) -> Self {
-        Self {
-            is_dir: value.is_dir,
-            full_path: value.full_path.clone(),
-            created_at: value.created_at,
-            modified_at: value.modified_at,
-            top_level_name: value.path_parts.last()
-                .expect("if path parts is empty, something went very wrong").clone()
-        }
+        Self::from(&value)
     }
 }
 
 impl From<&SFileRow> for SFile {
     fn from(value: &SFileRow) -> Self {
         Self {
+            id: value.id as u64,
             is_dir: value.is_dir,
             full_path: value.full_path.clone(),
             created_at: value.created_at,

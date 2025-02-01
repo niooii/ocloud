@@ -24,7 +24,9 @@ pub async fn handler(command: ServerCommand) -> Result<()> {
                 .unwrap_or(false);
             
             if proceed {
-                println!("HAHA just kidding this doesnt work yet");
+                let files = server::file_controller().await?;
+                files.wipe().await?;
+                println!("Finish.");
             }
         },
     }

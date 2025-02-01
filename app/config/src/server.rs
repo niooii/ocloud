@@ -45,14 +45,16 @@ impl PostgresConfig {
 #[derive(Deserialize, Serialize, Clone)]
 pub struct ServerConfig {
     pub data_dir: PathBuf,
+    pub files_dir: PathBuf,
+    pub max_filesize: Option<usize>,
     pub postgres_config: PostgresConfig,
-    pub max_filesize: Option<usize>
 }
 
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             data_dir: DATA_DIR.clone().join("data"),
+            files_dir: DATA_DIR.clone().join("files"),
             postgres_config: Default::default(),
             max_filesize: None
         }

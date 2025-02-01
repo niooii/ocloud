@@ -1,11 +1,11 @@
 mod web;
-mod storage;
+mod controllers;
 pub mod error;
 use web::*;
 use std::{env, sync::Arc};
 use axum::{middleware, response::{IntoResponse, Response}, serve::serve, Json, Router};
 use error::Error;
-use storage::{controller::{StorageController, StorageControllerInner}, model::ServerConfig};
+use controllers::{files::{FileController, FileControllerInner}, model::ServerConfig};
 use serde_json::json;                   
 use sqlx::PgPool;
 use tokio::{net::TcpListener, sync::RwLock};
@@ -13,20 +13,24 @@ use config::SERVER_CONFIG;
 
 use error::Result;
 
-pub async fn run(host: &str, port: u16) -> Result<()> {
-    // Create file save directory if it doesn't exist already
+pub async fn init() -> Result<()> {
+    // Create all required dirs
     tokio::fs::create_dir_all(&SERVER_CONFIG.data_dir).await?;
+    tokio::fs::create_dir_all(&SERVER_CONFIG.files_dir).await?;
 
+    Ok(())
+}
+
+pub async fn run(host: &str, port: u16) -> Result<()> {
+    init().await?;
     let db_url = SERVER_CONFIG.postgres_config.to_url();
 
-    let db_pool = PgPool::connect(
-        env::var("DATABASE_URL").expect("Could not find DATABASE_URL in env").as_str()
-    ).await?;
+    let db_pool = PgPool::connect(&db_url).await?;
 
     sqlx::migrate!("./migrations").run(&db_pool).await
         .expect("Failed to run migrations.");
 
-    let mc = Arc::new(StorageControllerInner::new(db_pool).await);
+    let mc = Arc::new(FileControllerInner::new(db_pool).await);
 
     let routes = Router::new()
         .nest("", routes::routes(mc).await)
@@ -62,4 +66,14 @@ async fn main_response_mapper(res: Response) -> Response {
     error_response.unwrap_or(res)
 }
 
-pub async fn 
+pub async fn file_controller() -> Result<FileController> {
+    init().await?;
+    let db_url = SERVER_CONFIG.postgres_config.to_url();
+
+    let db_pool = PgPool::connect(&db_url).await?;
+
+    sqlx::migrate!("./migrations").run(&db_pool).await
+        .expect("Failed to run migrations.");
+
+    Ok(Arc::new(FileControllerInner::new(db_pool).await))
+}

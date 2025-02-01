@@ -3,12 +3,12 @@ use axum::routing::get;
 use axum::Router;
 use tower_http::cors::CorsLayer;
 
-use crate::storage::controller::StorageController;
+use crate::controllers::files::FileController;
 use crate::handlers::media;
 
 use super::handlers::auth;
 
-pub async fn routes(controller: StorageController) -> Router {
+pub async fn routes(controller: FileController) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(tower_http::cors::Any)
         .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])

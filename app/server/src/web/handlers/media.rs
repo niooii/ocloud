@@ -5,10 +5,10 @@ use tokio::{fs::File, io::AsyncWriteExt, sync::Notify};
 use sha2::{Digest, Sha256};
 use tokio::fs;
 
-use crate::{error::Error, storage::{controller::{StorageController}, model::{FileUploadInfo, Media, VirtualPath}}};
+use crate::{error::Error, controllers::{files::{FileController}, model::{FileUploadInfo, Media, VirtualPath}}};
 use crate::error::Result;
 
-pub fn routes(controller: StorageController) -> Router {
+pub fn routes(controller: FileController) -> Router {
     Router::new()
         .route(
             "/files/*path", 
@@ -26,7 +26,7 @@ pub fn routes(controller: StorageController) -> Router {
 }
 
 pub async fn upload_media(
-    State(mc): State<StorageController>, 
+    State(files): State<FileController>, 
     Path(mut path): Path<VirtualPath>,
     mut multipart: Multipart
 ) -> Result<String> {
@@ -36,7 +36,7 @@ pub async fn upload_media(
     if let Some(mut field) = multipart.next_field().await
     .map_err(|e| Error::AxumError { why: format!("Multipart error: {}", e.body_text()) })? {
         
-        let save_dir = PathBuf::from(&SERVER_CONFIG.data_dir);
+        let save_dir = &SERVER_CONFIG.files_dir;
         
         // Name should be the name of the file, including the extension.
         let name: String = field.name().expect("File has no name??").to_string();
@@ -90,11 +90,11 @@ pub async fn upload_media(
 
         // HEHEHEHAW fix race condition 
         // just in case if two people upload the same file at the exact same time down to the millisecond...??
-        let mutex = mc.active_uploads.lock(file_hash.clone())
+        let mutex = files.active_uploads.lock(file_hash.clone())
             .await;
 
         // Check-in file to database
-        let vpathstr = match mc.finish_upload(info).await {
+        let vpathstr = match files.finish_upload(info).await {
             Err(e) => {
                 // doesnt really have to be checked
                 let _ = fs::remove_file(&temp_path).await;
@@ -115,11 +115,11 @@ pub async fn upload_media(
 
 pub async fn get_media(
     Path(path): Path<VirtualPath>,
-    State(storage): State<StorageController>,
+    State(files): State<FileController>,
 ) -> Result<Response> {
     println!("HEHEHAW {}", path.to_string_with_trailing());
     if !path.is_dir() {
-        let media: Media = storage.get_media(&path).await?;
+        let media: Media = files.get_media(&path).await?;
 
         let stream = media.reader_stream().await?;
         let body = Body::from_stream(stream);
@@ -151,7 +151,7 @@ pub async fn get_media(
 
         Ok(res)
     } else {
-        let list = storage.fs.list_dir(&path).await?
+        let list = files.list_dir(&path).await?
             .ok_or(Error::PathDoesntExist)?;
         Ok(Response::new(Body::from(serde_json::to_string(&list)?)))
     }
@@ -159,10 +159,10 @@ pub async fn get_media(
 }
 
 pub async fn delete_media(
-    State(storage): State<StorageController>,
+    State(files): State<FileController>,
     Path(path): Path<VirtualPath>,
 ) -> Result<()> {
-    storage.delete_sfile(&path).await?;
+    files.delete_sfile(&path).await?;
     
     Ok(())
 }

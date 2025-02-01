@@ -1,6 +1,5 @@
 pub mod model;
-pub mod controller;
-pub mod filesystem;
+pub mod files;
 
 #[cfg(test)]
 mod tests {
