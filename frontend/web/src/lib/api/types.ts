@@ -11,12 +11,8 @@ export class BaseClient {
     protected serverUrl: string;
     protected headers: Record<string, string>;
   
-    constructor() {
-        const url = localStorage.getItem("OCLOUD_URL");
-        if (!url) 
-            throw new Error("No server url, could not create api wrapper.");
-
-        this.serverUrl = url;
+    constructor(serverUrl: string) {
+        this.serverUrl = serverUrl;
         this.headers = {};
     }
   
