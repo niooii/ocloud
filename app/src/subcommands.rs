@@ -39,21 +39,10 @@ pub enum ServerCommand {
         /// The port to use when starting the server.
         #[arg(short = 'p', long = "port", default_value="443")]
         port: u16,
-    },
-    /// Utilities for hosting a postgres instance.
-    Db {
-        #[command(subcommand)]
-        command: DbCommand
+        /// Run with an embedded postgres database instead of connecting to an external one.
+        #[arg(short = 'd', long = "database")]
+        embedded_db: bool
     },
     /// Clears all data in the server, including uploaded files, etc.
     Wipe
-}
-
-/// TODO! what if user wants to use an external db, or not use docker?
-/// What if they want to run this entire program in docker?
-/// you fucking bum
-#[derive(Subcommand, Debug)]
-pub enum DbCommand {
-    Start,
-    Stop,
 }

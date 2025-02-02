@@ -21,12 +21,12 @@ pub async fn init() -> ServerResult<()> {
     Ok(())
 }
 
-pub async fn run(host: &str, port: u16) -> ServerResult<()> {
+pub async fn run(host: &str, port: u16, db_url: &str) -> ServerResult<()> {
     init().await?;
 
-    let db_url = SERVER_CONFIG.postgres.to_url();
+    println!("{db_url}");
 
-    let db_pool = PgPool::connect(&db_url).await?;
+    let db_pool = PgPool::connect(db_url).await?;
 
     sqlx::migrate!("./migrations").run(&db_pool).await
         .expect("Failed to run migrations.");

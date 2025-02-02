@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use super::server::PostgresConfig;
 use super::util;
 use super::Config;
 use super::Result;
@@ -9,22 +8,20 @@ use super::Error;
 #[derive(Deserialize, Serialize, Clone)]
 pub struct LocalPostgresConfig {
     pub host: String,
-    pub port: String,
+    pub port: u16,
     pub user: String,
     pub pass: String,
     pub database: String,
-    pub container_name: String,
 }
 
 impl Default for LocalPostgresConfig {
     fn default() -> Self {
         Self { 
             host: "127.0.0.1".into(), 
-            port: "9432".into(), 
+            port: 7432, 
             user: "user".into(), 
             pass: "pass".into(), 
             database: "postgres".into(),
-            container_name: "ocloud-db".into()
         }
     }
 }

@@ -4,7 +4,6 @@ mod error;
 mod subcommands;
 mod config;
 mod server;
-mod docker;
 
 use std::process::exit;
 use clap::Parser;
