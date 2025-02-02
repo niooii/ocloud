@@ -18,14 +18,8 @@ export async function ping(serverUrl: string): Promise<boolean> {
     }
 }
 
-// Will redirect to home page if the serverUrl is null.
-export function getServerUrl(): string {
-    const url = localStorage.getItem("OCLOUD_URL");
-    if (!url) {
-        console.log("Could not find server url for some reason, redirecting to landing page.");
-        redirect("/");
-    }
-    return url;
+export function getServerUrl(): string | null {
+    return localStorage.getItem("OCLOUD_URL");
 }
 
 export function saveServerUrl(serverUrl: string) {
