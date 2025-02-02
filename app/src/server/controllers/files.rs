@@ -6,6 +6,7 @@ use serde::{Serialize, Deserialize};
 use sqlx::{postgres::{PgArguments, PgQueryResult, PgRow}, query::{Query}, FromRow, PgPool, Postgres, Row, Transaction};
 use tokio::{fs, sync::{Notify, RwLock}};
 use key_mutex::tokio::KeyMutex;
+use tracing::trace;
 
 use crate::{config::SERVER_CONFIG, server::{controllers::model::SFileRow, error::{ServerError, ServerResult}}};
 
@@ -73,18 +74,12 @@ impl FileControllerInner {
                 query_as!(
                     Media,
                     "INSERT INTO media (
-                        uploaded_time,
-                        accessed_time,
-                        expiring_time,
                         file_size,
                         file_hash
                     )
-                    VALUES ($1, $2, $3, $4, $5)
+                    VALUES ($1, $2)
                     RETURNING *",
-                    info.upload_start_time,
-                    info.upload_start_time,
                     // TODO! expiring times maybe??
-                    0,
                     info.file_size, 
                     info.file_hash
                 )
@@ -97,7 +92,7 @@ impl FileControllerInner {
             // dont matter if this fails or not ngl
             let _ = fs::remove_file(&info.temp_path).await
                 .map_err(|e| ServerError::IOError { why: e.to_string() });
-            println!("Removed duplicate file");
+            trace!("Removed duplicate file {}", info.temp_path.to_string_lossy());
         } else {
             // No duplicate
             // Rename the file to its proper name
@@ -106,11 +101,11 @@ impl FileControllerInner {
             fs::create_dir_all(true_path.parent().unwrap()).await?;
             
             fs::rename(
-                info.temp_path.as_path(), 
-                true_path.as_path()
+                &info.temp_path, 
+                &true_path
             ).await.map_err(|e| ServerError::IOError { why: e.to_string() })?;
             
-            println!("Finalized filename..");  
+            trace!("Finalized upload: {}", true_path.to_string_lossy());  
         }
         // stage 3: insert the symbolic file into its table
         let vpath = 
@@ -127,16 +122,14 @@ impl FileControllerInner {
     }
 
     pub async fn get_media(&self, vpath: &VirtualPath) -> ServerResult<Media> {
-        Ok(
-            query_as!(
-                Media,
-                "SELECT * FROM media
-                WHERE id = $1",
-                self.get_media_id(vpath).await?,
-            )
-            .fetch_optional(&self.db_pool).await?
-            .ok_or_else(|| ServerError::NoMediaFound)?
+        query_as!(
+            Media,
+            "SELECT * FROM media
+            WHERE id = $1",
+            self.get_media_id(vpath).await?,
         )
+        .fetch_optional(&self.db_pool).await?
+        .ok_or(ServerError::NoMediaFound)
     }
 
     /// Wipes all the files stored. Very destructive.
@@ -227,11 +220,6 @@ impl FileControllerInner {
         info: SFileCreateInfo<'_>, 
         transaction: Option<&mut Transaction<'_, Postgres>>
     ) -> ServerResult<VirtualPath> {
-        let current_time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64;
-
         let (path, media_id, is_dir) = match info {
             SFileCreateInfo::Dir { path } => (path, None, true),
             SFileCreateInfo::File { path, media_id } => (path, Some(media_id), false),
@@ -246,17 +234,13 @@ impl FileControllerInner {
                 media_id,
                 full_path,
                 path_parts,
-                created_at,
-                modified_at,
                 is_dir
             )
-            VALUES ($1, $2, $3, $4, $5, $6)
+            VALUES ($1, $2, $3, $4)
             "#,
             media_id,
             full_path,
             &path_parts,
-            current_time,
-            current_time,
             is_dir,
         );
         self.execute_maybe_transacted(q, transaction).await

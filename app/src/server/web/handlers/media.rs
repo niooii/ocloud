@@ -4,6 +4,7 @@ use crate::config::SERVER_CONFIG;
 use tokio::{fs::File, io::AsyncWriteExt, sync::Notify};
 use sha2::{Digest, Sha256};
 use tokio::fs;
+use tracing::{error, trace};
 
 use crate::{server::controllers::{files::{FileController}, model::{FileUploadInfo, Media, VirtualPath}}};
 use crate::server::error::{ServerError, ServerResult};
@@ -40,27 +41,28 @@ pub async fn upload_media(
         
         // Name should be the name of the file, including the extension.
         let name: String = field.name().expect("File has no name??").to_string();
-        println!("Got file: {name}");
-        println!("for path: {}", path.to_string());
+        trace!("Got file: {name}");
+        trace!("for path: {}", path.to_string());
         
         if path.to_string_with_trailing().is_empty() {
             path = VirtualPath::root();
         }
 
-        let uploaded_time: i64 = SystemTime::now()
+        let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("Time itself is against you today, it seems..")
-            .as_millis() as i64;
+            .unwrap()
+            .as_millis();
 
         let mut hasher = Sha256::new();
 
         let temp_path: PathBuf = save_dir.join(
-            format!("./tmp_{uploaded_time}_{name}")
+            format!("./tmp_{now}_{name}")
         );
 
 	    let mut file: File = File::create(&temp_path).await
             .map_err(|e| ServerError::IOError { why: e.to_string() } )?;
         // i64 type because postgres doesnt support unsigned gg
+
         let mut file_size: i64 = 0;
         while let Some(chunk) = field.chunk().await
             .map_err(|e| ServerError::AxumError { why: format!("Chunk error: {}", e.body_text()) })? {
@@ -81,7 +83,6 @@ pub async fn upload_media(
             file_size,
             file_hash: file_hash.clone(),
             vpath: path,
-            upload_start_time: uploaded_time
         };
         
         // Ensure the file handle is dropped before doing anything
@@ -98,7 +99,7 @@ pub async fn upload_media(
             Err(e) => {
                 // doesnt really have to be checked
                 let _ = fs::remove_file(&temp_path).await;
-                println!("(Tried) removed temp file due to db error: {e:?}");
+                error!("(Tried) removed {} due to error: {e:?}", temp_path.to_string_lossy());
                 Err(e)
             }
             Ok(c) => Ok(c)
@@ -117,7 +118,6 @@ pub async fn get_media(
     Path(path): Path<VirtualPath>,
     State(files): State<FileController>,
 ) -> ServerResult<Response> {
-    println!("HEHEHAW {}", path.to_string_with_trailing());
     if !path.is_dir() {
         let media: Media = files.get_media(&path).await?;
 

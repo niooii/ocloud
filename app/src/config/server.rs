@@ -7,11 +7,12 @@ use super::Config;
 use super::Result;
 use super::Error;
 use super::DATA_DIR;
+use super::PROGRAM_NAME;
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct PostgresConfig {
     pub host: String,
-    pub port: String,
+    pub port: u16,
     pub user: String,
     pub pass: String,
     pub database: String,
@@ -21,10 +22,10 @@ impl Default for PostgresConfig {
     fn default() -> Self {
         Self { 
             host: "127.0.0.1".into(), 
-            port: "9432".into(), 
+            port: 9432, 
             user: "user".into(), 
             pass: "pass".into(), 
-            database: "postgres".into() 
+            database: PROGRAM_NAME.to_string() 
         }
     }
 }
@@ -38,6 +39,16 @@ impl PostgresConfig {
             self.host,
             self.port,
             self.database
+        )
+    }
+
+    pub fn to_url_default_db(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}/postgres",
+            self.user,
+            self.pass,
+            self.host,
+            self.port,
         )
     }
 }

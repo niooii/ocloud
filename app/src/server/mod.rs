@@ -1,13 +1,14 @@
 mod web;
 mod controllers;
 pub mod error;
+use tracing::{trace, warn};
 use web::*;
 use std::{env, sync::Arc};
 use axum::{middleware, response::{IntoResponse, Response}, serve::serve, Json, Router};
 use error::ServerError;
 use controllers::{files::{FileController, FileControllerInner}, model::ServerConfig};
 use serde_json::json;                   
-use sqlx::PgPool;
+use sqlx::{postgres::PgConnectOptions, PgPool};
 use tokio::{net::TcpListener, sync::RwLock};
 use crate::config::SERVER_CONFIG;
 
@@ -18,24 +19,45 @@ pub async fn init() -> ServerResult<()> {
     tokio::fs::create_dir_all(&SERVER_CONFIG.data_dir).await?;
     tokio::fs::create_dir_all(&SERVER_CONFIG.files_dir).await?;
 
-    Ok(())
+    // Try creating the ocloud database
+    let pool = 
+    PgPool::connect(&SERVER_CONFIG.postgres.to_url_default_db()).await?;
+
+    let res = sqlx::query(
+        &format!(
+            "CREATE DATABASE {}", 
+            SERVER_CONFIG.postgres.database
+        )
+    ).execute(&pool).await;
+
+    match res {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            if e.to_string().contains("already exists") {
+                Ok(())
+            } else {
+                Err(e.into())
+            }
+        }
+    }
 }
 
-pub async fn run(host: &str, port: u16, db_url: &str) -> ServerResult<()> {
+pub async fn run(host: &str, port: u16, pg_connect_opts: PgConnectOptions) -> ServerResult<()> {
     init().await?;
+    trace!("Created required directories and databases.");
 
-    println!("{db_url}");
-
-    let db_pool = PgPool::connect(db_url).await?;
+    let db_pool = PgPool::connect_with(pg_connect_opts)
+    .await?;
 
     sqlx::migrate!("./migrations").run(&db_pool).await
-        .expect("Failed to run migrations.");
+    .expect("Failed to run migrations.");
+    trace!("Ran database migrations.");
 
     let mc = Arc::new(FileControllerInner::new(db_pool).await);
 
     let routes = Router::new()
-        .nest("", routes::routes(mc).await)
-        .layer(middleware::map_response(main_response_mapper));
+    .nest("", routes::routes(mc).await)
+    .layer(middleware::map_response(main_response_mapper));
 
     let listener = TcpListener::bind(
         format!("{host}:{port}")
@@ -58,7 +80,8 @@ async fn main_response_mapper(res: Response) -> Response {
             |(status_code, client_err)| {
             let err_json = serde_json::to_value(client_err);
             let body = err_json.unwrap_or(json!("Failed to get error information."));
-            println!("{client_err:?}");
+
+            warn!("Error: {client_err:?}");
 
             (*status_code, Json(body)).into_response()
             }

@@ -1,4 +1,5 @@
 use std::{future::Future, path::{Path, PathBuf}, pin::Pin};
+use chrono::NaiveDateTime;
 use serde::de::Error as err;
 use axum::extract::multipart::Field;
 use futures::{Stream, StreamExt};
@@ -8,7 +9,7 @@ use sqlx::{prelude::FromRow, PgPool};
 use tokio::{fs::File, io::{AsyncRead, AsyncReadExt}};
 use bytes::Bytes;
 use tokio_util::io::ReaderStream;
-use crate::{config::SERVER_CONFIG, error::{CliError}, server::error::{ServerError, ServerResult}};
+use crate::{config::SERVER_CONFIG, server::error::{ServerError, ServerResult}};
 
 use super::{files::FileController};
 
@@ -16,12 +17,11 @@ use super::{files::FileController};
 #[derive(FromRow)]
 pub struct Media {
     pub id: i64,
-    // Unix timestamp in milliseconds.
-    pub uploaded_time: i64,
-    // Unix timestamp in milliseconds. Will be used to implement caching later.
-    pub accessed_time: i64,
-    // Unix timestamp in milliseconds. TODO!
-    pub expiring_time: i64,
+    pub uploaded_time: NaiveDateTime,
+    // TODO! Will be used to implement caching later.
+    pub accessed_time: NaiveDateTime,
+    // uhh.. TODO!
+    pub expiring_time: Option<NaiveDateTime>,
     // Size of the file in bytes.
     pub file_size: i64,
     // The SHA-256 checksum of the file.
@@ -65,8 +65,8 @@ pub struct SFile {
     pub id: u64,
     pub is_dir: bool,
     pub full_path: String,
-    pub created_at: i64,
-    pub modified_at: i64,
+    pub created_at: NaiveDateTime,
+    pub modified_at: NaiveDateTime,
     // Either the name of the directory or the file
     pub top_level_name: String
 }
@@ -78,8 +78,8 @@ pub struct SFileRow {
     pub path_parts: Vec<String>,
     pub is_dir: bool,
     pub full_path: String,
-    pub created_at: i64,
-    pub modified_at: i64,
+    pub created_at: NaiveDateTime,
+    pub modified_at: NaiveDateTime,
     pub media_id: Option<i64>,
 }
 
@@ -249,7 +249,6 @@ pub struct FileUploadInfo {
     pub temp_path: PathBuf,
     pub file_size: i64,
     pub file_hash: String,
-    pub upload_start_time: i64,
     pub vpath: VirtualPath
 }           
 

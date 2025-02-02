@@ -1,15 +1,15 @@
 use std::path::PathBuf;
-use crate::{config::CLI_CONFIG, error::{CliError, CliResult}};
+use crate::{config::CLI_CONFIG, cli::error::{CliError, CliResult}};
 use std::path::Path;
 use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::{multipart::{Form, Part}, Body, Client, Url};
 use tokio_util::{bytes::Bytes, io::ReaderStream};
 use futures_util::{stream::StreamExt, Stream};
+use tracing::{error, info, trace};
 
 pub async fn handler(path: PathBuf, preserve: bool, dir: String) -> CliResult<String> {
     if let Err(e) = Url::parse(&CLI_CONFIG.server_url) {
-        eprintln!("Error: cloud url is invalid or does not exist.");
-        eprintln!("Use the set-url command to set a cloud url.");
+        error!("Error: cloud url is invalid or does not exist. Use the set-url command to set a cloud url.");
         return Err(e.into());
     }
 
@@ -28,13 +28,14 @@ pub async fn handler(path: PathBuf, preserve: bool, dir: String) -> CliResult<St
         }
     });
 
-    println!("wiw chat: {}", upload_path.to_string_lossy());
+    trace!("Uploading file to: {}", upload_path.to_string_lossy());
 
     upload_file(&upload_path, &path).await
 }
 
+// TODO! this should be in api wrapper
 pub async fn upload_file(upload_path: &Path, file_path: &Path) -> CliResult<String> {
-    println!("Uploading {:?}...", file_path.file_name().unwrap_or_default());
+    trace!("Uploading {:?}...", file_path.file_name().unwrap_or_default());
 
     let client = Client::new();
 
@@ -50,7 +51,9 @@ pub async fn upload_file(upload_path: &Path, file_path: &Path) -> CliResult<Stri
         CLI_CONFIG.server_url.clone(),
         upload_path.parent().unwrap().to_string_lossy()
     );
-    println!("{endpoint}");
+
+    trace!("Uploading to url {endpoint}");
+
     let res = client.post(&endpoint)
         .multipart(multipart_form)
         .send().await?;
@@ -64,7 +67,7 @@ pub async fn upload_file(upload_path: &Path, file_path: &Path) -> CliResult<Stri
     Ok(format!("{}/files/{}", CLI_CONFIG.server_url, media_endpoint))
 }
 
-pub async fn upload_stream(path: &Path) 
+async fn upload_stream(path: &Path) 
     -> CliResult<impl Stream<Item = std::result::Result<Bytes, std::io::Error>>> {
     let file = tokio::fs::File::open(path)
         .await?;

@@ -1,6 +1,5 @@
-use std::{io::{Read, Write}, path::{Path, PathBuf}};
-use toml::toml;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::path::Path;
+use serde::{de::DeserializeOwned, Serialize};
 use std::fs;
 use super::{Error, Result, CONFIG_DIR};
 

@@ -1,5 +1,5 @@
 use reqwest::StatusCode;
-use crate::{server, Cli};
+use crate::server;
 
 pub type CliResult<T> = std::result::Result<T, CliError>;
 

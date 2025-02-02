@@ -1,55 +1,23 @@
-mod api;
-mod commands;
-mod error;
-mod subcommands;
+use std::env::set_var;
+
+use cli::error::CliResult;
+use tracing::trace;
+use tracing_subscriber::EnvFilter;
+
 mod config;
 mod server;
-
-use std::process::exit;
-use clap::Parser;
-use error::CliResult;
-use config::{Config, CLI_CONFIG, CONFIG_DIR, DATA_DIR};
-use subcommands::SubCommand;
-
-#[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
-struct Cli {
-    #[command(subcommand)]
-    command: SubCommand,
-}
+mod cli;
 
 #[tokio::main]
 async fn main() -> CliResult<()> {
-    let cli = Cli::parse();
+    set_var("RUST_LOG", "none,ocloud=trace");
 
-    config::init();
+    tracing_subscriber::fmt()
+        .with_target(true)
+        .with_thread_ids(true)
+        .with_line_number(true)
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 
-    // let mut clipboard: Clipboard = Clipboard::new()?;
-
-    match cli.command {
-        SubCommand::Upload { path, preserve, dir } => {
-            let s = commands::upload::handler(path, preserve, dir).await?;
-            println!("File can be found at {s}");
-        },
-        SubCommand::SetUrl { url } => {
-            let mut config_new = CLI_CONFIG.clone();
-            config_new.server_url = url.to_string().trim_matches('/').into();
-            
-            if let Err(e) = config_new.save() {
-                eprintln!("Failed to save config changes: {e:?}");
-                exit(1);
-            }
-
-            println!("Done.");
-        },
-        SubCommand::Server { command } => {
-            commands::server::handler(command).await?;
-        },
-        SubCommand::Paths => {
-            println!("Config files: {}", CONFIG_DIR.to_string_lossy());
-            println!("Media and other data: {}", DATA_DIR.to_string_lossy());
-        }
-    }
-    
-    Ok(())
+    cli::run().await
 }
