@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO sfiles (\n                media_id,\n                full_path,\n                path_parts,\n                is_dir\n            )\n            VALUES ($1, $2, $3, $4)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "TextArray",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d39a03c6f5e1698cf681d6b6d8ab98fd9f2fd10ea457becd37eaf9805101308b"
+}

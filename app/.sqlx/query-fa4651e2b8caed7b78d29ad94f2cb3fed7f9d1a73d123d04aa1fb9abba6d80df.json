@@ -31,12 +31,12 @@
       {
         "ordinal": 5,
         "name": "created_at",
-        "type_info": "Int8"
+        "type_info": "Timestamp"
       },
       {
         "ordinal": 6,
         "name": "modified_at",
-        "type_info": "Int8"
+        "type_info": "Timestamp"
       }
     ],
     "parameters": {

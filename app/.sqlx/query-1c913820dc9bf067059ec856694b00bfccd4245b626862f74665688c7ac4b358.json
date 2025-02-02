@@ -11,17 +11,17 @@
       {
         "ordinal": 1,
         "name": "uploaded_time",
-        "type_info": "Int8"
+        "type_info": "Timestamp"
       },
       {
         "ordinal": 2,
         "name": "accessed_time",
-        "type_info": "Int8"
+        "type_info": "Timestamp"
       },
       {
         "ordinal": 3,
         "name": "expiring_time",
-        "type_info": "Int8"
+        "type_info": "Timestamp"
       },
       {
         "ordinal": 4,
@@ -43,7 +43,7 @@
       false,
       false,
       false,
-      false,
+      true,
       false,
       false
     ]
