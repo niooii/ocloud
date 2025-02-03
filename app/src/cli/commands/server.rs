@@ -1,13 +1,9 @@
-use std::env::set_var;
-use std::path::PathBuf;
-use std::time::Duration;
-
 use inquire::Confirm;
 use sqlx::postgres::PgConnectOptions;
 
-use crate::config::{CLI_CONFIG, CONFIG_DIR, DATA_DIR, PROGRAM_NAME, SERVER_CONFIG};
+use crate::config::SERVER_CONFIG;
 use crate::server;
-use super::super::subcommands::{ServerCommand};
+use super::super::subcommands::ServerCommand;
 use super::super::error::CliResult;
 
 pub async fn handler(command: ServerCommand) -> CliResult<()> {
@@ -15,6 +11,7 @@ pub async fn handler(command: ServerCommand) -> CliResult<()> {
         ServerCommand::Run { host, port } => {
             let pg_conf = &SERVER_CONFIG.postgres;
             let connect_opts = PgConnectOptions::new()
+                .options([("timezone", "UTC")])
                 .host(&pg_conf.host)
                 .port(pg_conf.port)
                 .username(&pg_conf.user)
