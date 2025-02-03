@@ -20,8 +20,10 @@ pub async fn init() -> ServerResult<()> {
     tokio::fs::create_dir_all(&SERVER_CONFIG.files_dir).await?;
 
     // Try creating the ocloud database
+    let pool_url = SERVER_CONFIG.postgres.to_url_default_db();
+    trace!("Trying to connect to database at {pool_url}...");
     let pool = 
-    PgPool::connect(&SERVER_CONFIG.postgres.to_url_default_db()).await?;
+    PgPool::connect(&pool_url).await?;
 
     let res = sqlx::query(
         &format!(
