@@ -31,17 +31,32 @@ export default function Navbar() {
                     <NavigationMenu>
                         <NavigationMenuList>
                             <NavigationMenuItem>
-                                <NavigationMenuTrigger>SOME MENU</NavigationMenuTrigger>
+                                <NavigationMenuTrigger>Menu</NavigationMenuTrigger>
+
                                 <NavigationMenuContent>
-                                    <NavigationMenuLink>
+                                    <NavigationMenuLink href="/home">
                                         <Card className="p-4">
-                                            Type shit..
+                                            Home
+                                        </Card>
+                                    </NavigationMenuLink>
+
+                                    <NavigationMenuLink href="/account">
+                                        <Card className="p-4">
+                                            Account
+                                        </Card>
+                                    </NavigationMenuLink>
+                                    
+                                    <NavigationMenuLink href="/setting">
+                                        <Card className="p-4">
+                                            Setting
                                         </Card>
                                     </NavigationMenuLink>
                                 </NavigationMenuContent>
+                                
                                 <NavigationMenuLink href="https://github.com/niooii/ocloud" className={navigationMenuTriggerStyle()}>
                                     Documentation
                                 </NavigationMenuLink>
+                            
                             </NavigationMenuItem>
                         </NavigationMenuList>
                     </NavigationMenu>

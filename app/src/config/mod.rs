@@ -11,9 +11,9 @@ mod server;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum Error {
-    FileReadError,
+    FileReadError { err: String },
     DeserializeError,
     SerializeError
 }
@@ -31,8 +31,8 @@ impl From<toml::ser::Error> for Error {
 }
 
 impl From<std::io::Error> for Error {
-    fn from(_value: std::io::Error) -> Self {
-        Error::FileReadError
+    fn from(value: std::io::Error) -> Self {
+        Error::FileReadError { err: value.to_string() }
     }
 }
 
@@ -83,10 +83,14 @@ lazy_static! {
         parse_or_prompt("server")
     };
     pub static ref CONFIG_DIR: PathBuf = {
-        dirs::config_dir().unwrap_or_default().join(PROGRAM_NAME)
+        let dir = dirs::config_dir().unwrap_or_default().join(PROGRAM_NAME);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
     };
     pub static ref DATA_DIR: PathBuf = {
-        dirs::data_dir().unwrap_or_default().join(PROGRAM_NAME)
+        let dir = dirs::data_dir().unwrap_or_default().join(PROGRAM_NAME);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
     };
 }
 

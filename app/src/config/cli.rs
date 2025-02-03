@@ -18,7 +18,7 @@ impl Config for CliConfig {
         let res = util::read_toml::<Self>(path);
         if let Err(e) = res {
             match e {
-                Error::FileReadError => {
+                Error::FileReadError { err } => {
                     let default = Self::default();
                     default.save()?;
                     return Ok(default);
