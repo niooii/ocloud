@@ -36,6 +36,7 @@ class MediaCache {
     private readonly DB_VERSION = 1;
     public initialized = false;
     private CACHE_DURATION = 1000 * 60 * 60; // 1 hour
+    private MAX_CACHED_FILE_SIZE = 200 * 1_000_000 // 200 mb
 
     // TODO! remove all expired entries on init.
     // otherwise too many files will stay cached forever.
@@ -62,11 +63,9 @@ class MediaCache {
             request.onupgradeneeded = (event) => {
                 const db = (event.target as IDBOpenDBRequest).result;
                 
-                // Create the object store if it doesn"t exist
                 if (!db.objectStoreNames.contains(this.STORE_NAME)) {
                     const store = db.createObjectStore(this.STORE_NAME, { keyPath: "mediaId" });
-                    // Create indexes for faster querying
-                    store.createIndex("timestamp", "timestamp", { unique: false });
+                    store.createIndex("createdAt", "createdAt", { unique: false });
                 }
             };
         });
@@ -144,6 +143,11 @@ class MediaCache {
     async put(mediaId: number, blob: Blob) {
         if (!this.initialized)
             throw new Error("Using uninitialized cache.");
+
+        if (blob.size > this.MAX_CACHED_FILE_SIZE) {
+            console.log("File too big to cache, too bad.");
+            return;
+        }
 
         const entry: CacheEntry = {
             mediaId,
