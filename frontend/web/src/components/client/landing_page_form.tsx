@@ -73,7 +73,7 @@ export default function LandingForm() {
         <Input 
             type="url" 
             placeholder="Server URL (https://yourdomain.com)"
-            className="text-center"
+            className="text-center max-w-md mx-auto"
             onChange={(e) => setUrlValue(e.target.value)}
             defaultValue={urlValue}
         />
