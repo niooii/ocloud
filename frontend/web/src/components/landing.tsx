@@ -5,7 +5,7 @@ import LandingForm from "../components/client/landing_page_form";
 
 const Landing = () => {
     return (
-        <div className="grid-cols-1 gap-4 row-start-2 items-center justify-items-center">
+        <div className="flex flex-col min-h-screen justify-center items-center">
             <Image
             src="/onion_logo.svg"
             alt="onion"
@@ -16,7 +16,6 @@ const Landing = () => {
 
             <LandingForm/>
         </div>
-        
     );
 };
 
