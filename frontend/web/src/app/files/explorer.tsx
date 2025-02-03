@@ -21,6 +21,7 @@ import { SFile } from "@/lib/api/types"
 // top_level_name: String
 const testFiles: SFile[] = [
     {
+        id: 1,
         is_dir: true,
         full_path: new Path("root/documents"),
         created_at: new Date("2025-02-03T01:02:53.539781"),
@@ -28,6 +29,7 @@ const testFiles: SFile[] = [
         top_level_name: "documents"
     },
     {
+        id: 2,
         is_dir: false,
         full_path: new Path("root/documents/resume.pdf"),
         created_at: new Date("2025-02-03T01:03:12.123456"),
@@ -35,6 +37,7 @@ const testFiles: SFile[] = [
         top_level_name: "resume.pdf"
     },
     {
+        id: 3,
         is_dir: true,
         full_path: new Path("root/documents/receipts"),
         created_at: new Date("2025-02-03T02:15:00.111222"),
@@ -42,6 +45,7 @@ const testFiles: SFile[] = [
         top_level_name: "receipts"
     },
     {
+        id: 4,
         is_dir: false,
         full_path: new Path("root/documents/receipts/jan2025.pdf"),
         created_at: new Date("2025-02-03T02:16:33.444555"),
@@ -49,6 +53,7 @@ const testFiles: SFile[] = [
         top_level_name: "jan2025.pdf"
     },
     {
+        id: 5,
         is_dir: true,
         full_path: new Path("root/images"),
         created_at: new Date("2025-02-03T03:00:00.000000"),
@@ -56,6 +61,7 @@ const testFiles: SFile[] = [
         top_level_name: "images"
     },
     {
+        id: 6,
         is_dir: false,
         full_path: new Path("root/images/profile.jpg"),
         created_at: new Date("2025-02-03T03:01:15.666777"),
@@ -63,6 +69,7 @@ const testFiles: SFile[] = [
         top_level_name: "profile.jpg"
     },
     {
+        id: 7,
         is_dir: false,
         full_path: new Path("root/images/banner.png"),
         created_at: new Date("2025-02-03T03:02:30.123456"),
