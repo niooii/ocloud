@@ -87,8 +87,14 @@ export class Path {
 
     // Includes the root path if applicable.
     public getPathParts(): string[] {
-        let parts = this.pathStr.split("/");
-        return parts;
+        if (this.isDir()) {
+            let parts = this.pathStr.split("/");
+            // otherwise last component will be an empty string
+            parts.pop();
+            return parts;
+        } else {
+            return this.pathStr.split("/");
+        }
     }
 
     // Removes trailing slashes and duplicate consecutive slashes, as well as any illegal characters.
@@ -153,7 +159,7 @@ export class Path {
 
     // Returns the new joined path. Returns undefined if the path `other` is absolute, 
     // or if the current path is not a directory.
-    public join_str(other: string): Path | undefined {
+    public joinStr(other: string): Path | undefined {
         let path = this.pathStr;
         let other_path = new Path(other);
 

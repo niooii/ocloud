@@ -12,12 +12,12 @@ interface SFileRaw {
 
 export interface SFile {
     id: number,
-    is_dir: boolean,
-    full_path: Path,
-    created_at: Date,
-    modified_at: Date,
+    isDir: boolean,
+    fullPath: Path,
+    createdAt: Date,
+    modifiedAt: Date,
     // Either the name of the directory or the file
-    top_level_name: string
+    topLevelName: string
 }
 
 export class BaseClient {

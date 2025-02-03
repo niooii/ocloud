@@ -13,7 +13,7 @@ export class MediaApi extends BaseClient {
     }
 
   async uploadFile(dir: Path, file: File): Promise<null> {
-    const uploadPath = dir.join_str(file.name);
+    const uploadPath = dir.joinStr(file.name);
     const result = await this.requestString(
         `/media/${uploadPath}`, 
         {
