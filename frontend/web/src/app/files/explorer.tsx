@@ -18,15 +18,24 @@ import { Card } from "@/components/ui/card"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import { getFileIcon } from "./utils"
 import { MouseEvent } from 'react'; 
-
+import {
+    Dialog,
+    DialogContent,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import { MediaApi } from "@/lib/api/media"
 import { getServerUrl } from "@/lib/include"
+import BlobViewer from "./media_viewer"
+import MediaViewer from "./media_viewer"
 
 export function FileExplorer() {
     const [cwd, setCwd] = useState(
         Path.root()
     );
-    const [files, setFiles] = useState<SFile[]>([]);
+    const [files, setFiles] = useState<SFile[] | null>([]);
+    const [viewingMedia, setViewingMedia] = useState(false);
+    const [selectedFile, setSelectedFile] = useState<SFile | null>(null);
+    const [media, setMedia] = useState<Promise<Blob | null> | null>(null);
 
     useEffect(() => {
         api.listDir(cwd).then(fs => {
@@ -41,6 +50,11 @@ export function FileExplorer() {
         if (file.isDir) {
             const newDir = cwd.joinStr(file.topLevelName)!.asDir();
             setCwd(newDir);
+        } else {
+            setSelectedFile(file);
+            setViewingMedia(true);
+            const promise = api.getMedia(file.fullPath);
+            setMedia(promise);
         }
     };
 
@@ -50,12 +64,12 @@ export function FileExplorer() {
                 <BreadcrumbList>
                     {cwd.getPathParts().map((part) => (
                         <>
-                            <BreadcrumbItem>
-                                <BreadcrumbLink>{part}</BreadcrumbLink>
-                            </BreadcrumbItem>
-                            <BreadcrumbSeparator>
-                                <Slash />
-                            </BreadcrumbSeparator>
+                        <BreadcrumbItem>
+                            <BreadcrumbLink>{part}</BreadcrumbLink>
+                        </BreadcrumbItem>
+                        <BreadcrumbSeparator>
+                            <Slash />
+                        </BreadcrumbSeparator>
                         </>
                     ))
                     }
@@ -104,33 +118,49 @@ export function FileExplorer() {
                             )
                         }
                         {
-                            files.map((file) => (
-                                <TableRow 
-                                key={file.id} 
-                                className="cursor-pointer" 
-                                onClick={(e) => onRowClick(e, file)}>
-                                    <TableCell className="w-[50%]">
-                                        <div className="flex flex-row items-center gap-2 font-medium">
-                                        {file.isDir ? (
-                                            <FolderIcon className="h-4 w-4 text-blue-500" />
-                                        ) : (
-                                            getFileIcon(file.topLevelName)
-                                        )}
-                                        {file.topLevelName}
+                            files ? (
+                                files.map((file) => (
+                                    <TableRow 
+                                    key={file.id} 
+                                    className="cursor-pointer" 
+                                    onClick={(e) => onRowClick(e, file)}>
+                                        <TableCell className="w-[50%]">
+                                            <div className="flex flex-row items-center gap-2 font-medium">
+                                            {file.isDir ? (
+                                                <FolderIcon className="h-4 w-4 text-blue-500" />
+                                            ) : (
+                                                getFileIcon(file.topLevelName)
+                                            )}
+                                            {file.topLevelName}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="w-[30%] text-gray-200">
+                                            {file.createdAt.toLocaleString()}
+                                        </TableCell>
+                                        <TableCell className="w-[20%] text-right">
+                                        <div className="flex justify-end">
+                                            <EllipsisVertical className="h-4 w-4" />
                                         </div>
-                                    </TableCell>
-                                    <TableCell className="w-[30%] text-gray-200">
-                                        {file.createdAt.toLocaleString()}
-                                    </TableCell>
-                                    <TableCell className="w-[20%] text-right">
-                                    <div className="flex justify-end">
-                                        <EllipsisVertical className="h-4 w-4" />
-                                    </div>
-                                    </TableCell>
-                                </TableRow>
-                            ))
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (<div>bluh</div>)
                         }
                     </TableBody>
+                    <Dialog open={viewingMedia} onOpenChange={setViewingMedia}>
+                        <DialogContent className="max-w-4xl">
+                            <DialogTitle className="flex flex-row items-center gap-4">
+                                {getFileIcon(selectedFile?.topLevelName)}
+                                {selectedFile?.topLevelName} 
+                            </DialogTitle>
+                            {media && (
+                                <MediaViewer 
+                                future={media} 
+                                filename={selectedFile?.topLevelName} 
+                                />
+                            )}
+                        </DialogContent>
+                    </Dialog>
                     {/* <TableFooter>
                         <TableRow>
                             <TableCell colSpan={3} className="text-gray-400 text-center">More actions</TableCell>

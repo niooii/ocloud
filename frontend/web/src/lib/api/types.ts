@@ -29,64 +29,74 @@ export class BaseClient {
             }
         return this.headers;
     }
-  
-    protected async request<T>(
+
+    private _fetch(
         endpoint: string,
         options: RequestInit = {}
-    ): Promise<T> {
-        const response = await fetch(`${this.serverUrl}${endpoint}`, {
+    ): Promise<Response> {
+        return fetch(`${this.serverUrl}${endpoint}`, {
             ...options,
             headers: {
                 ...this.getHeaders(),
                 ...options.headers,
             },
         });
-    
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'API request failed');
+    }
+  
+    protected async request<T>(
+        endpoint: string,
+        options: RequestInit = {}
+    ): Promise<T | null> {
+        try {
+            const response = await this._fetch(endpoint, options);
+        
+            if (!response.ok) {
+                const error = await response.json();
+                console.log(`Request failed: ${error}`);
+                return null;
+            }
+
+            return response.json();
+        } catch (e) {
+            console.log(`Request failed: ${e}`);
+            return null;
         }
-    
-        return response.json();
     }
   
     protected async requestBytes(
         endpoint: string,
         options: RequestInit = {}
-    ): Promise<Blob> {
-        const response = await fetch(`${this.serverUrl}${endpoint}`, {
-            ...options,
-            headers: {
-                ...this.getHeaders(),
-                ...options.headers,
-            },
-        });
-    
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'API request failed');
+    ): Promise<Blob | null> {
+        try {
+            const response = await this._fetch(endpoint, options);
+        
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'API request failed');
+            }
+            return response.blob();
+        } catch (e) {
+            console.log(`Request failed: ${e}`);
+            return null;
         }
-    
-        return response.blob();
     }
   
     protected async requestString(
         endpoint: string,
         options: RequestInit = {}
-    ): Promise<string> {
-        const response = await fetch(`${this.serverUrl}${endpoint}`, {
-            ...options,
-            headers: {
-                ...this.getHeaders(),
-                ...options.headers,
-            },
-        });
+    ): Promise<string | null> {
+        try {
+            const response = await this._fetch(endpoint, options);
     
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'API request failed');
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'API request failed');
+            }
+        
+            return response.text();
+        } catch (e) {
+            console.log(`Request failed: ${e}`);
+            return null;
         }
-    
-        return response.text();
     }
 }

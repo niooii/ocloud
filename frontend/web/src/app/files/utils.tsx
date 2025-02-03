@@ -11,7 +11,10 @@ import {
 } from "lucide-react";
 
 // thank you generative AI
-export function getFileIcon(filename: string) {
+export function getFileIcon(filename?: string) {
+    if (!filename)
+        return <FileIcon className="h-4 w-4 text-gray-400" />;
+    
     const extension = filename.split('.').pop()?.toLowerCase();
     
     switch (extension) {
@@ -19,7 +22,8 @@ export function getFileIcon(filename: string) {
         case 'doc':
         case 'docx':
         case 'pdf':
-            return <FileTextIcon className="h-4 w-4 text-blue-400" />;
+        case 'md':
+            return <FileTextIcon className="text-blue-400" />;
             
         case 'jpg':
         case 'jpeg':
