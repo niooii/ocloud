@@ -1,6 +1,7 @@
 import Navbar from "@/components/navbar";
 import { Input } from "@/components/ui/input";
 import FileUploader from "./upload";
+import { FileExplorer } from "./explorer";
 
 export default function Files() {
     
@@ -10,6 +11,8 @@ export default function Files() {
             <Navbar/>
             <main className="flex flex-col gap-4 row-start-2 items-center -mt-20">
                 FILES
+                <FileExplorer/>
+                UPLOAD
                 <FileUploader/>
             </main>
             <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">

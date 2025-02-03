@@ -1,10 +1,21 @@
+import { Path } from "./path";
+
+interface SFileRaw {
+    is_dir: boolean,
+    full_path: string,
+    created_at: string,
+    modified_at: string,
+    // Either the name of the directory or the file
+    top_level_name: string
+}
+
 export interface SFile {
     is_dir: boolean,
-    full_path: String,
-    created_at: BigInt,
-    modified_at: BigInt,
+    full_path: Path,
+    created_at: Date,
+    modified_at: Date,
     // Either the name of the directory or the file
-    top_level_name: String
+    top_level_name: string
 }
 
 export class BaseClient {
