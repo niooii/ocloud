@@ -11,7 +11,6 @@ pub enum CliError {
     ReqwestError { err: reqwest::Error },
     FailStatusCode { status_code: StatusCode },
     UrlParseError { issue: String },
-    DockerError { err: bollard::errors::Error }
 }
 
 impl From<std::io::Error> for CliError {
@@ -35,11 +34,5 @@ impl From<url::ParseError> for CliError {
 impl From<server::error::ServerError> for CliError {
     fn from(value: server::error::ServerError) -> Self {
         Self::ServerError { err: value }
-    }
-}
-
-impl From<bollard::errors::Error> for CliError {
-    fn from(value: bollard::errors::Error) -> Self {
-        Self::DockerError { err: value }
     }
 }
