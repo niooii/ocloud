@@ -1,15 +1,5 @@
 import { Path } from "./path";
 
-interface SFileRaw {
-    id: number,
-    is_dir: boolean,
-    full_path: string,
-    created_at: string,
-    modified_at: string,
-    // Either the name of the directory or the file
-    top_level_name: string
-}
-
 export interface SFile {
     id: number,
     isDir: boolean,
