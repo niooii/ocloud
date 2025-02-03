@@ -160,7 +160,6 @@ export class Path {
     // Returns the new joined path. Returns undefined if the path `other` is absolute, 
     // or if the current path is not a directory.
     public joinStr(other: string): Path | undefined {
-        let path = this.pathStr;
         let other_path = new Path(other);
 
         if (other_path.isAbsolute() || !this.isDir()) {
@@ -168,6 +167,7 @@ export class Path {
         }
 
         let newPath = new Path(`${this.toString()}/${other_path.toString()}`);
+        
         return newPath;
     }
 

@@ -13,18 +13,19 @@ import {
 import { Path } from "@/lib/api/path"
 import { SFile } from "@/lib/api/types"
 import { useState } from "react"
-import { FolderIcon, Slash } from "lucide-react"
+import { EllipsisVertical, FolderIcon, Slash } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import { getFileIcon } from "./utils"
 import { MouseEvent } from 'react'; 
 
-// is_dir: boolean,
-// full_path: String,
-// created_at: BigInt,
-// modified_at: BigInt,
-// // Either the name of the directory or the file
-// top_level_name: String
+import {
+    ContextMenu,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuTrigger,
+} from "@/components/ui/context-menu"
+
 const testFiles: SFile[] = [
     {
         id: 1,
@@ -86,14 +87,14 @@ const testFiles: SFile[] = [
    
 export function FileExplorer() {
     const [cwd, setCwd] = useState(
-        Path.root().joinStr("dir/somedir/test/")!
+        Path.root()
     );
 
     const onRowClick = (e: MouseEvent<HTMLTableRowElement>, file: SFile) => {
         console.log(`${file.topLevelName}`);
         if (file.isDir) {
-            console.log(`${cwd}`);
-            setCwd(cwd.joinStr(file.topLevelName)!);
+            const newDir = cwd.joinStr(file.topLevelName)!.asDir();
+            setCwd(newDir);
         }
     };
 
@@ -119,39 +120,48 @@ export function FileExplorer() {
                     {/* <TableCaption>A list of your recent invoices.</TableCaption> */}
                         <TableHeader>
                             <TableRow>
-                                <TableHead className="w-full">Name</TableHead>
-                                <TableHead>Uploaded</TableHead>
-                                <TableHead className="text-right">Size</TableHead>
+                                <TableHead className="w-[50%]">Name</TableHead>
+                                <TableHead className="w-[30%]">Uploaded</TableHead>
+                                <TableHead className="w-[33%] text-right">
+                                <div className="flex justify-end cursor-pointer">
+                                    <EllipsisVertical className="h-4 w-4" />
+                                </div>
+                                </TableHead>
                             </TableRow>
                         </TableHeader>
-                    <TableBody>
+                    <TableBody className="w-full">
                         {testFiles.map((file) => (
                             <TableRow 
                             key={file.id} 
                             className="cursor-pointer" 
                             onClick={(e) => onRowClick(e, file)}>
-                                <TableCell className="flex flex-row items-center gap-2 font-medium">
-                                    {
-                                        file.isDir ? (
-                                            <FolderIcon className="h-4 w-4 text-blue-500" />
-                                        ) : (
-                                            getFileIcon(file.topLevelName)
-                                        )
-                                    }
+                                <TableCell className="w-[50%]">
+                                    <div className="flex flex-row items-center gap-2 font-medium">
+                                    {file.isDir ? (
+                                        <FolderIcon className="h-4 w-4 text-blue-500" />
+                                    ) : (
+                                        getFileIcon(file.topLevelName)
+                                    )}
                                     {file.topLevelName}
+                                    </div>
                                 </TableCell>
-                                <TableCell>{file.createdAt.toLocaleDateString()}</TableCell>
-                                <TableCell className="text-right">NOT YET</TableCell>
+                                <TableCell className="w-[30%] text-gray-200">
+                                    {file.createdAt.toLocaleString()}
+                                </TableCell>
+                                <TableCell className="w-[20%] text-right">
+                                <div className="flex justify-end">
+                                    <EllipsisVertical className="h-4 w-4" />
+                                </div>
+                                </TableCell>
                             </TableRow>
                         ))
                         }
                     </TableBody>
-                    <TableFooter>
+                    {/* <TableFooter>
                         <TableRow>
-                            <TableCell colSpan={2}>Total (i stole this)</TableCell>
-                            <TableCell className="text-right">$2,500.00</TableCell>
+                            <TableCell colSpan={3} className="text-gray-400 text-center">More actions</TableCell>
                         </TableRow>
-                    </TableFooter>
+                    </TableFooter> */}
                 </Table>
             </Card>
         </div>

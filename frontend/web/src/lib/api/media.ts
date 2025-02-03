@@ -4,8 +4,9 @@ import { SFile } from "./types";
 
 export class MediaApi extends BaseClient {
     async listDir(dir: Path): Promise<[SFile]> {
+        const _dir = dir.asDir();
         return this.request<[SFile]>(
-            `/media/${dir.toString()}`,
+            `/media/${_dir.toString()}`,
             {
                 method: "GET"
             }

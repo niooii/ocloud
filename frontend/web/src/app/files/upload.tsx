@@ -1,10 +1,11 @@
 "use client"
 
 import { Input } from "@/components/ui/input";
+import { ChangeEvent } from "react";
 
 export default function FileUploader() {
-    // TODO! figure out the type
-    const handleUploadFile = (e) => {
+    
+    const handleUploadFile = (e: ChangeEvent<HTMLInputElement>) => {
         console.log("UPLOADED !!");
 
         // const mediaApi = new MediaApi();
