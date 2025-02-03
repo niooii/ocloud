@@ -141,7 +141,7 @@ export class Path {
             return undefined;
         }
 
-        return new Path(path.substring(0, targetSlashIdx));
+        return new Path(path.substring(0, targetSlashIdx)).asDir();
     }
 
     // Returns the new joined path. Returns undefined if the path `other` is absolute, 
@@ -200,10 +200,7 @@ export class Path {
     }
 
     public pop() {
-        const parent = this.parent();
-        if (parent === undefined) {
-            throw new Error("Cannot pop from root or invalid path");
-        }
+        let parent = this.parent() ?? Path.root();
         
         this.pathStr = parent.pathStr;
     }

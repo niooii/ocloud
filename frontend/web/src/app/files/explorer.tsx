@@ -130,6 +130,33 @@ export function FileExplorer() {
                             </TableRow>
                         </TableHeader>
                     <TableBody className="w-full">
+                        {
+                            (!cwd.isRoot()) && (
+                                <TableRow 
+                                key={"prev"} 
+                                className="cursor-pointer" 
+                                onClick={(e) => {
+                                    const prev = cwd.clone();
+                                    prev.pop();
+                                    setCwd(prev);
+                                }}>
+                                <TableCell className="w-[50%]">
+                                    <div className="flex flex-row items-center gap-2 font-medium">
+                                    <FolderIcon className="h-4 w-4 text-yellow-500" />
+                                    ..
+                                    </div>
+                                </TableCell>
+                                <TableCell className="w-[30%] text-gray-200">
+                                    
+                                </TableCell>
+                                <TableCell className="w-[20%] text-right">
+                                <div className="flex justify-end">
+                                    <EllipsisVertical className="h-4 w-4" />
+                                </div>
+                                </TableCell>
+                            </TableRow>
+                            )
+                        }
                         {testFiles.map((file) => (
                             <TableRow 
                             key={file.id} 
