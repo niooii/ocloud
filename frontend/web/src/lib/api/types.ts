@@ -1,6 +1,7 @@
 import { Path } from "./path";
 
 interface SFileRaw {
+    id: number,
     is_dir: boolean,
     full_path: string,
     created_at: string,
@@ -10,6 +11,7 @@ interface SFileRaw {
 }
 
 export interface SFile {
+    id: number,
     is_dir: boolean,
     full_path: Path,
     created_at: Date,
