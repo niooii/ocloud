@@ -1,5 +1,5 @@
 use std::{future::Future, path::{Path, PathBuf}, pin::Pin};
-use chrono::NaiveDateTime;
+use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::de::Error as err;
 use axum::extract::multipart::Field;
 use futures::{Stream, StreamExt};
@@ -55,18 +55,19 @@ impl Media {
 
     // Attempts to delete the underlying file from the disk.
     pub async fn delete_from_disk(&self) -> ServerResult<()> {
-        Ok(tokio::fs::remove_file(self.true_path().await.as_path()).await
-            .map_err(|e| ServerError::IOError { why: e.to_string() })?)
+        tokio::fs::remove_file(self.true_path().await.as_path()).await
+            .map_err(|e| ServerError::IOError { why: e.to_string() })
     }
 }
 
 #[derive(Serialize)]
 pub struct SFile {
     pub id: u64,
+    pub media_id: Option<u64>,
     pub is_dir: bool,
     pub full_path: String,
-    pub created_at: NaiveDateTime,
-    pub modified_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>,
+    pub modified_at: DateTime<Utc>,
     // Either the name of the directory or the file
     pub top_level_name: String
 }
@@ -78,6 +79,7 @@ pub struct SFileRow {
     pub path_parts: Vec<String>,
     pub is_dir: bool,
     pub full_path: String,
+    // times will always be in UTC
     pub created_at: NaiveDateTime,
     pub modified_at: NaiveDateTime,
     pub media_id: Option<i64>,
@@ -93,10 +95,11 @@ impl From<&SFileRow> for SFile {
     fn from(value: &SFileRow) -> Self {
         Self {
             id: value.id as u64,
+            media_id: value.media_id.map(|id| id as u64),
             is_dir: value.is_dir,
             full_path: value.full_path.clone(),
-            created_at: value.created_at,
-            modified_at: value.modified_at,
+            created_at: value.created_at.and_utc(),
+            modified_at: value.modified_at.and_utc(),
             top_level_name: value.path_parts.last()
                 .expect("if path parts is empty, something went very wrong").clone()
         }

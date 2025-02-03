@@ -1,9 +1,9 @@
 import { Path } from "./path";
 import { BaseClient } from "./types";
-import { SFile } from "./types";
 
 interface SFileRaw {
     id: number,
+    media_id?: number,
     is_dir: boolean,
     full_path: string,
     created_at: string,
@@ -12,46 +12,151 @@ interface SFileRaw {
     top_level_name: string
 }
 
+export interface SFile {
+    id: number,
+    referencesMediaId?: number,
+    isDir: boolean,
+    fullPath: Path,
+    createdAt: Date,
+    modifiedAt: Date,
+    // Either the name of the directory or the file
+    topLevelName: string
+}
+
+interface CacheEntry {
+    mediaId: number;
+    blob: Blob;
+    cachedAt: Date;
+}
+
 class MediaCache {
     private db: IDBDatabase | null = null;
-    private readonly DB_NAME = 'MediaCache';
-    private readonly STORE_NAME = 'files';
+    private readonly DB_NAME = "MediaCache";
+    private readonly STORE_NAME = "files";
     private readonly DB_VERSION = 1;
     public initialized = false;
     private CACHE_DURATION = 1000 * 60 * 60; // 1 hour
 
+    // TODO! remove all expired entries on init.
+    // otherwise too many files will stay cached forever.
     async init(): Promise<boolean> {
-        // ??? just read the docs bruh
-        // const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
-      
-        // request.onupgradeneeded = (event) => {
-        //     const db = (event.target as IDBOpenDBRequest).result;
-            
-        //     if (!db.objectStoreNames.contains(this.STORE_NAME)) {
-        //         const store = db.createObjectStore(this.STORE_NAME, { keyPath: 'id' });
+        return new Promise((resolve, reject) => {
+            if (this.initialized && this.db) {
+                resolve(true);
+                return;
+            }
+
+            const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
+
+            request.onerror = () => {
+                console.error("Failed to open database");
+                reject(new Error("Failed to open database"));
+            };
+
+            request.onsuccess = (event) => {
+                this.db = (event.target as IDBOpenDBRequest).result;
+                this.initialized = true;
+                resolve(true);
+            };
+
+            request.onupgradeneeded = (event) => {
+                const db = (event.target as IDBOpenDBRequest).result;
                 
-        //         store.createIndex("sfile", "sfile");
-        //     }
-        // };
-  
-        // request.onsuccess = (event) => {
-        //     this.db = (event.target as IDBOpenDBRequest).result;
-        //     return true;
-        // };
-  
-        // request.onerror = (event) => {
-        //     return false;
-        // };
+                // Create the object store if it doesn"t exist
+                if (!db.objectStoreNames.contains(this.STORE_NAME)) {
+                    const store = db.createObjectStore(this.STORE_NAME, { keyPath: "mediaId" });
+                    // Create indexes for faster querying
+                    store.createIndex("timestamp", "timestamp", { unique: false });
+                }
+            };
+        });
+    }
+
+    private async getFromDb(mediaId: number): Promise<CacheEntry | null> {
+        if (!this.db) {
+            throw new Error("Database not initialized");
+        }
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction([this.STORE_NAME], "readonly");
+            const store = transaction.objectStore(this.STORE_NAME);
+            const request = store.get(mediaId);
+
+            request.onsuccess = () => {
+                resolve(request.result || null);
+            };
+
+            request.onerror = () => {
+                console.error("Error fetching from cache");
+                reject(new Error("Error fetching from cache"));
+            };
+        });
+    }
+
+    private async saveToDb(entry: CacheEntry): Promise<void> {
+        if (!this.db) {
+            throw new Error("Database not initialized");
+        }
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction([this.STORE_NAME], "readwrite");
+            const store = transaction.objectStore(this.STORE_NAME);
+            const request = store.put(entry);
+
+            request.onsuccess = () => {
+                resolve();
+            };
+
+            request.onerror = () => {
+                console.error("Error saving to cache");
+                reject(new Error("Error saving to cache"));
+            };
+        });
     }
   
-    async get(fileId: number): Promise<Blob | null> {
-        // const entry = await this.getFromDB(fileId);
-        // return null if out of date        
-        // return entry.blob;
+    async get(file: SFile): Promise<Blob | null> {
+        if (!this.initialized)
+            throw new Error("Using uninitialized cache.");
+        
+        if (!file.referencesMediaId)
+            return null;
+        
+        try {
+            const entry = await this.getFromDb(file.referencesMediaId);
+
+            // Return null if no entry found, if entry is expired,
+            // or if the file was "modified" more recently than the cache.
+            if (!entry 
+                || Date.now() - entry.cachedAt.getTime() > this.CACHE_DURATION
+                || file.modifiedAt > entry.cachedAt) {
+                    console.log(file.modifiedAt.toString());
+                    console.log(entry?.cachedAt.toString());
+                return null;
+            }
+
+            return entry.blob;
+        } catch (error) {
+            console.error('Error retrieving from cache:', error);
+            return null;
+        }
     }
-  
-    async set(fileId: number, blob: Blob): Promise<void> {
-        // await this.saveToDB(entry);
+    
+    async put(mediaId: number, blob: Blob) {
+        if (!this.initialized)
+            throw new Error("Using uninitialized cache.");
+
+        const entry: CacheEntry = {
+            mediaId,
+            blob,
+            cachedAt: new Date(Date.now())
+        };
+
+        try {
+            await this.saveToDb(entry);
+            console.log("saved!");
+        } catch (e) {
+            console.log(`Failed to save blob to cache: ${e}`);
+        }
     }
 }
 
@@ -82,13 +187,32 @@ export class MediaApi extends BaseClient {
                 createdAt: new Date(raw.created_at),
                 modifiedAt: new Date(raw.modified_at),
                 // Either the name of the directory or the file
-                topLevelName: raw.top_level_name
+                topLevelName: raw.top_level_name,
+                referencesMediaId: raw.media_id
             };
         });
     }
 
-    async getMedia(file: Path): Promise<Blob | null> {
-        const _file = file.asFile();
+    async getMedia(file: SFile, useCache: boolean = true): Promise<Blob | null> {
+        const _file = file.fullPath.asFile();
+        if (!file.referencesMediaId)
+            return null;
+
+        if (useCache) {
+            if (!this.cache.initialized) {
+                await this.cache.init();
+                if (!this.cache.initialized) {
+                    throw new Error("Could not init the cache.");
+                }
+            }
+
+            const cached = await this.cache.get(file);
+            if (cached) {
+                return cached;
+            }
+            console.log("found nothing in cache... :(");
+        }
+
         const blob = await this.requestBytes(
             `/files/${_file.toString()}`,
             {
@@ -98,6 +222,10 @@ export class MediaApi extends BaseClient {
 
         if (!blob)
             return null;
+
+        if (useCache) {
+            await this.cache.put(file.referencesMediaId, blob);
+        }
 
         return blob;
     }

@@ -1,15 +1,5 @@
 import { Path } from "./path";
 
-export interface SFile {
-    id: number,
-    isDir: boolean,
-    fullPath: Path,
-    createdAt: Date,
-    modifiedAt: Date,
-    // Either the name of the directory or the file
-    topLevelName: string
-}
-
 export class BaseClient {
     protected serverUrl: string;
     protected headers: Record<string, string>;

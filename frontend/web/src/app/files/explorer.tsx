@@ -11,7 +11,7 @@ import {
     TableRow,
     } from "@/components/ui/table"
 import { Path } from "@/lib/api/path"
-import { SFile } from "@/lib/api/types"
+import { SFile } from "@/lib/api/media"
 import { useEffect, useState } from "react"
 import { EllipsisVertical, FolderIcon, Slash } from "lucide-react"
 import { Card } from "@/components/ui/card"
@@ -53,7 +53,7 @@ export function FileExplorer() {
         } else {
             setSelectedFile(file);
             setViewingMedia(true);
-            const promise = api.getMedia(file.fullPath);
+            const promise = api.getMedia(file);
             setMedia(promise);
         }
     };
