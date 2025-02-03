@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import LandingForm from "../components/client/landing_page_form";
 import { Path } from "@/lib/api/path";
+import Navbar from "../components/navbar";
 
 export default function Landing() {
   // testing path stuff
@@ -9,7 +10,9 @@ export default function Landing() {
   console.log(path.name())
 
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
+    <div className="font-[family-name:var(--font-geist-sans)]">
+      <Navbar/>
+      <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-4 pb-20 gap-16 sm:p-5">
       <main className="flex flex-col gap-4 row-start-2 items-center -mt-20">
         {/* <text className="text-7xl font-bold">oCloud</text> */}
         <Image
@@ -38,6 +41,7 @@ export default function Landing() {
           Github
         </Link>
       </footer>
+      </div>
     </div>
   );
 }
