@@ -235,14 +235,18 @@ export class MediaApi extends BaseClient {
     }
 
     async uploadFile(dir: Path, file: File): Promise<null> {
-        const uploadPath = dir.joinStr(file.name);
+        const uploadPath = dir.asDir();
+        const formData = new FormData();
+        formData.append(file.name, file);
         const result = await this.requestString(
-            `/media/${uploadPath}`, 
+            `/files/${uploadPath}`, 
             {
                 method: "POST",
-                // how to send multipart
+                body: formData,
             }
         );
+
+        console.log(result);
 
         return null;
     }

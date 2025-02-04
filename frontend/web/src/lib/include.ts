@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { TestApi } from "./api/test";
+import { toast } from "@/hooks/use-toast";
 
 export async function ping(serverUrl: string): Promise<boolean> {
     try {
@@ -30,4 +31,13 @@ export function saveServerUrl(serverUrl: string) {
 
 export function clearServerUrl() {
     localStorage.removeItem("OCLOUD_URL");
+}
+
+export function errorToast(err: string, description: string, durationMillis: number = 5000) {
+    toast({
+        variant: "destructive",
+        title: err,
+        description,
+        duration: durationMillis
+    });
 }

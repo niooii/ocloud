@@ -24,7 +24,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { MediaApi } from "@/lib/api/media"
-import { getServerUrl } from "@/lib/include"
+import { errorToast, getServerUrl } from "@/lib/include"
 import BlobViewer from "./media_viewer"
 import MediaViewer from "./media_viewer"
 
@@ -41,15 +41,30 @@ export function FileExplorer() {
         api.listDir(cwd).then(fs => {
             setFiles(fs);
         });
-    }, [cwd]);
+    }, []);
 
     const api = new MediaApi(getServerUrl()!);
+
+    const updateCwdAndFiles = (newDir: Path) => {
+        api.listDir(newDir).then(fs => {
+            if (!fs) {
+                errorToast(
+                    "Something went wrong..",
+                    "Check your internet connection and the server availability.",
+                );
+            } else {
+                // we do this at the same time for visual sync reasons
+                setFiles(fs);
+                setCwd(newDir);
+            }
+        });
+    }
 
     const onRowClick = (e: MouseEvent<HTMLTableRowElement>, file: SFile) => {
         console.log(`${file.topLevelName}`);
         if (file.isDir) {
             const newDir = cwd.joinStr(file.topLevelName)!.asDir();
-            setCwd(newDir);
+            updateCwdAndFiles(newDir);
         } else {
             setSelectedFile(file);
             setViewingMedia(true);
@@ -98,7 +113,7 @@ export function FileExplorer() {
                                 onClick={(e) => {
                                     const prev = cwd.clone();
                                     prev.pop();
-                                    setCwd(prev);
+                                    updateCwdAndFiles(prev);
                                 }}>
                                 <TableCell className="w-[50%]">
                                     <div className="flex flex-row items-center gap-2 font-medium">

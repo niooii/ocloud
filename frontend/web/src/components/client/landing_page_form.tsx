@@ -7,7 +7,7 @@ import { redirect } from "next/navigation"
 import { useEffect, useState } from "react"
 import { ToastAction } from "@/components/ui/toast"
 import { useToast } from "@/hooks/use-toast"
-import { clearServerUrl, getServerUrl, ping, saveServerUrl } from "@/lib/include";
+import { clearServerUrl, errorToast, getServerUrl, ping, saveServerUrl } from "@/lib/include";
 
 export default function LandingForm() {
     const [urlValue, setUrlValue] = useState("");
@@ -24,12 +24,10 @@ export default function LandingForm() {
             if (pinged) {
                 redirect("/home");
             } else {
-                toast({
-                    variant: "destructive",
-                    title: "Somethings off...",
-                    description: "Check your URL or server and try again.",
-                    duration: 5000
-                });
+                errorToast(
+                    "Somethings off...",
+                    "Check your URL or server and try again.",
+                );
                 clearServerUrl();
             }
         })
@@ -41,7 +39,7 @@ export default function LandingForm() {
             ping(cleanUrl).then((pinged) => {
                 if (pinged) {
                     saveServerUrl(cleanUrl);
-                    // redirect blah blah
+                    // redirect blah blah\
                     toast({
                         variant: "default",
                         title: "Zoooooom",
@@ -51,12 +49,10 @@ export default function LandingForm() {
                     redirect("/home");
                 } else {
                     // failed to reach the server url
-                    toast({
-                        variant: "destructive",
-                        title: "Could not reach the URL provided :(",
-                        description: "Check your URL or server and try again.",
-                        duration: 5000
-                    });
+                    errorToast(
+                        "Could not reach the URL provided :(",
+                        "Check your URL or server and try again.",
+                    );
                 }
             })
         }

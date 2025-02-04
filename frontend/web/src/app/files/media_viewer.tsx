@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Image as ImageIcon, File, Loader2 } from "lucide-react";
 import { getFileIcon } from "./utils";
@@ -15,7 +15,7 @@ export default function MediaViewer({ future, filename }: BlobViewerProps) {
   const [type, setType] = React.useState<"image" | "text" | "video" | "other">("other");
   const [blob, setBlob] = React.useState<Blob | null>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const loadBlob = async () => {
       try {
         const result = await future;
