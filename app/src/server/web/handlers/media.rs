@@ -1,6 +1,6 @@
 use std::{io::Write, path::PathBuf, sync::{Arc, Mutex}, time::{SystemTime, UNIX_EPOCH}};
 use axum::{body::Body, extract::{DefaultBodyLimit, Multipart, Path, Query, State}, http::{header, HeaderValue}, response::Response, routing::get, Json, Router};
-use crate::config::SERVER_CONFIG;
+use crate::{config::SERVER_CONFIG, server::controllers::model::SFile};
 use tokio::{fs::File, io::AsyncWriteExt, sync::Notify};
 use sha2::{Digest, Sha256};
 use tokio::fs;
@@ -30,7 +30,7 @@ pub async fn upload_media(
     State(files): State<FileController>, 
     Path(mut path): Path<VirtualPath>,
     mut multipart: Multipart
-) -> ServerResult<String> {
+) -> ServerResult<SFile> {
     path.err_if_file()?;
 
     // Write the first field to the disk, ignore other fields.
@@ -95,7 +95,7 @@ pub async fn upload_media(
             .await;
 
         // Check-in file to database
-        let vpathstr = match files.finish_upload(info).await {
+        let sfile = match files.finish_upload(info).await {
             Err(e) => {
                 // doesnt really have to be checked
                 let _ = fs::remove_file(&temp_path).await;
@@ -107,7 +107,7 @@ pub async fn upload_media(
 
         drop(mutex);
 
-        Ok(vpathstr?)
+        Ok(sfile?)
     } else {
         // There were no fields.
         Err(ServerError::Error { why: "No content uploaded".to_string() })

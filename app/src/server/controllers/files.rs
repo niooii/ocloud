@@ -53,7 +53,7 @@ impl FileControllerInner {
 }
 
 impl FileControllerInner {
-    pub async fn finish_upload(&self, mut info: FileUploadInfo) -> ServerResult<String> {
+    pub async fn finish_upload(&self, mut info: FileUploadInfo) -> ServerResult<SFile> {
         let mut tx = self.db_pool.begin().await?;
         info.vpath.push_file(info.file_name)?;
         // stage 1: insert into media table if it doesnt exist
@@ -108,7 +108,7 @@ impl FileControllerInner {
             trace!("Finalized upload: {}", true_path.to_string_lossy());  
         }
         // stage 3: insert the symbolic file into its table
-        let vpath = 
+        let f = 
             self.make_file(
                 &info.vpath,
                 media.id,
@@ -118,7 +118,7 @@ impl FileControllerInner {
         // finally commit transaction... phew
         tx.commit().await?;
     
-        Ok(vpath.to_string())
+        Ok(f)
     }
 
     pub async fn get_media(&self, vpath: &VirtualPath) -> ServerResult<Media> {
@@ -211,15 +211,11 @@ impl FileControllerInner {
         Ok(())
     }
 
-    /// Returns the virtual path inserted into the database, in rare cases
-    /// it could be different.
-    /// If a transaction is passed in but fails for whatever reason
-    /// all the intermediate directories will still be created (not transacted).
-    async fn mk_sfile(
+    async fn _create_file(
         &self, 
         info: SFileCreateInfo<'_>, 
         transaction: Option<&mut Transaction<'_, Postgres>>
-    ) -> ServerResult<VirtualPath> {
+    ) -> ServerResult<SFile> {
         let (path, media_id, is_dir) = match info {
             SFileCreateInfo::Dir { path } => (path, None, true),
             SFileCreateInfo::File { path, media_id } => (path, Some(media_id), false),
@@ -228,7 +224,8 @@ impl FileControllerInner {
         let path_parts = path.path_parts();
         let full_path = path.to_string();
 
-        let q = query!(
+        let q = query_as!(
+            SFileRow,
             r#"
             INSERT INTO sfiles (
                 media_id,
@@ -237,13 +234,18 @@ impl FileControllerInner {
                 is_dir
             )
             VALUES ($1, $2, $3, $4)
+            RETURNING *
             "#,
             media_id,
             full_path,
             &path_parts,
             is_dir,
         );
-        self.execute_maybe_transacted(q, transaction).await
+        let file = if let Some(t) = transaction {
+            q.fetch_one(&mut **t).await
+        } else {
+            q.fetch_one(&self.db_pool).await
+        }
         .map_err(|e| {
             let unique_violation = e.as_database_error()
             .and_then(|d| d.code())
@@ -255,18 +257,21 @@ impl FileControllerInner {
             }
         })?;
 
-        Ok(full_path.into())
+        Ok(SFile::from(file))
     }
 
+
+    /// If a transaction is passed in but fails for whatever reason
+    /// all the intermediate directories will still be created (not transacted).
     pub async fn make_file(
         &self, 
         vpath: &VirtualPath, 
         media_id: i64,
         transaction: Option<&mut Transaction<'_, Postgres>>
-    ) -> ServerResult<VirtualPath> {
+    ) -> ServerResult<SFile> {
         vpath.err_if_dir()?;
         self.make_all_dirs(vpath).await?;
-        self.mk_sfile(
+        self._create_file(
             SFileCreateInfo::File { path: vpath, media_id }, 
             transaction
         ).await
@@ -276,9 +281,9 @@ impl FileControllerInner {
         &self, 
         vpath: &VirtualPath, 
         transaction: Option<&mut Transaction<'_, Postgres>>
-    ) -> ServerResult<VirtualPath> {
+    ) -> ServerResult<SFile> {
         vpath.err_if_file()?;
-        self.mk_sfile(
+        self._create_file(
             SFileCreateInfo::Dir { path: vpath }, 
             transaction
         ).await
