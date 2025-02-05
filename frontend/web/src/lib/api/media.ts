@@ -234,20 +234,16 @@ export class MediaApi extends BaseClient {
         return blob;
     }
 
-    async uploadFile(dir: Path, file: File): Promise<null> {
+    async uploadFile(dir: Path, file: File): Promise<SFile | null> {
         const uploadPath = dir.asDir();
         const formData = new FormData();
         formData.append(file.name, file);
-        const result = await this.requestString(
+        return await this.request<SFile>(
             `/files/${uploadPath}`, 
             {
                 method: "POST",
                 body: formData,
             }
         );
-
-        console.log(result);
-
-        return null;
     }
 }
