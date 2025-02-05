@@ -107,7 +107,7 @@ pub async fn upload_media(
 
         drop(mutex);
 
-        Ok(sfile?)
+        sfile
     } else {
         // There were no fields.
         Err(ServerError::Error { why: "No content uploaded".to_string() })
