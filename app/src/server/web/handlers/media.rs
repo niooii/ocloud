@@ -30,7 +30,7 @@ pub async fn upload_media(
     State(files): State<FileController>, 
     Path(mut path): Path<VirtualPath>,
     mut multipart: Multipart
-) -> ServerResult<SFile> {
+) -> ServerResult<Json<SFile>> {
     path.err_if_file()?;
 
     // Write the first field to the disk, ignore other fields.
@@ -107,7 +107,7 @@ pub async fn upload_media(
 
         drop(mutex);
 
-        sfile
+        sfile.map(Json)
     } else {
         // There were no fields.
         Err(ServerError::Error { why: "No content uploaded".to_string() })
