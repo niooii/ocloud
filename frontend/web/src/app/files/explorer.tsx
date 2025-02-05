@@ -28,6 +28,7 @@ import { errorToast, getServerUrl } from "@/lib/include"
 import BlobViewer from "./media_viewer"
 import MediaViewer from "./media_viewer"
 import FileDropArea from "@/components/client/file_dropper"
+import FileUploader from "./upload"
 
 export function FileExplorer() {
     const [cwd, setCwd] = useState(
@@ -71,8 +72,24 @@ export function FileExplorer() {
         }
     };
 
+    const onFileUpload = (files: FileList) => {
+        console.log(files);
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const uploadTo = cwd.clone();
+            api.uploadFile(uploadTo, file).then(() => {
+                if (uploadTo == cwd) {
+                    updateCwdAndFiles(cwd);
+                    // TODO! make the endpoint return the created sfile. this is stupid
+                    console.log("work");
+                }
+            });
+        }
+    }
+
     return (
-        <div className="w-full max-w-7xl">
+        <>
+        <div className="w-full max-w-7xl flex-col">
             <Breadcrumb className="py-2">
                 <BreadcrumbList>
                     {cwd.getPathParts().map((part) => (
@@ -183,5 +200,7 @@ export function FileExplorer() {
                 </Table>
             </Card>
         </div>
+        <FileUploader onChanged={onFileUpload}/>
+        </>
     )
 }
