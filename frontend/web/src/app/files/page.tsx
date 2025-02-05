@@ -2,6 +2,7 @@ import Navbar from "@/components/navbar";
 import { Input } from "@/components/ui/input";
 import FileUploader from "./upload";
 import { FileExplorer } from "./explorer";
+import FileDropArea from "@/components/client/file_dropper";
 
 export default function Files() {
     return (

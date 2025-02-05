@@ -27,6 +27,7 @@ import { MediaApi } from "@/lib/api/media"
 import { errorToast, getServerUrl } from "@/lib/include"
 import BlobViewer from "./media_viewer"
 import MediaViewer from "./media_viewer"
+import FileDropArea from "@/components/client/file_dropper"
 
 export function FileExplorer() {
     const [cwd, setCwd] = useState(
@@ -89,52 +90,52 @@ export function FileExplorer() {
             </Breadcrumb>
             <Card className="w-full">
                 <Table className="w-full">
-                    {/* <TableCaption>A list of your recent invoices.</TableCaption> */}
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[50%]">Name</TableHead>
-                                <TableHead className="w-[30%]">Uploaded</TableHead>
-                                <TableHead className="w-[33%] text-right">
-                                <div className="flex justify-end cursor-pointer">
-                                    <EllipsisVertical className="h-4 w-4" />
-                                </div>
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="w-[50%]">Name</TableHead>
+                            <TableHead className="w-[30%]">Uploaded</TableHead>
+                            <TableHead className="w-[33%] text-right">
+                            <div className="flex justify-end cursor-pointer">
+                                <EllipsisVertical className="h-4 w-4" />
+                            </div>
+                            </TableHead>
+                        </TableRow>
+                    </TableHeader>
                     <TableBody className="w-full">
                         {
-                            (!cwd.isRoot()) && (
-                                <TableRow 
-                                key={"prev"} 
-                                className="cursor-pointer" 
-                                onClick={(e) => {
-                                    const prev = cwd.clone();
-                                    prev.pop();
-                                    updateCwdAndFiles(prev);
-                                }}>
-                                <TableCell className="w-[50%]">
-                                    <div className="flex flex-row items-center gap-2 font-medium">
-                                    <FolderIcon className="h-4 w-4 text-yellow-500" />
-                                    ..
-                                    </div>
-                                </TableCell>
-                                <TableCell className="w-[30%] text-gray-200">
-                                    
-                                </TableCell>
-                                <TableCell className="w-[20%] text-right">
-                                <div className="flex justify-end">
-                                    <EllipsisVertical className="h-4 w-4" />
+                        (!cwd.isRoot()) && (
+                            <TableRow 
+                            key={"prev"} 
+                            className="cursor-pointer" 
+                            onClick={(e) => {
+                                const prev = cwd.clone();
+                                prev.pop();
+                                updateCwdAndFiles(prev);
+                            }}>
+                            <TableCell className="w-[50%]">
+                                <div className="flex flex-row items-center gap-2 font-medium">
+                                <FolderIcon className="h-4 w-4 text-yellow-500" />
+                                ..
                                 </div>
-                                </TableCell>
-                            </TableRow>
-                            )
+                            </TableCell>
+                            <TableCell className="w-[30%] text-gray-200">
+                                
+                            </TableCell>
+                            <TableCell className="w-[20%] text-right">
+                            <div className="flex justify-end">
+                                <EllipsisVertical className="h-4 w-4" />
+                            </div>
+                            </TableCell>
+                        </TableRow>
+                        )
                         }
                         {
-                            files ? (
-                                files.map((file) => (
-                                    <TableRow 
+                        files ? (
+                            files.map((file) => (
+                                <FileDropArea onFileUpload={() => {}}>
+                                <TableRow 
                                     key={file.id} 
-                                    className="cursor-pointer" 
+                                    className="cursor-pointer w-full" 
                                     onClick={(e) => onRowClick(e, file)}>
                                         <TableCell className="w-[50%]">
                                             <div className="flex flex-row items-center gap-2 font-medium">
@@ -155,8 +156,9 @@ export function FileExplorer() {
                                         </div>
                                         </TableCell>
                                     </TableRow>
-                                ))
-                            ) : (<div>bluh</div>)
+                                </FileDropArea>
+                            ))
+                        ) : (<div>bluh</div>)
                         }
                     </TableBody>
                     <Dialog open={viewingMedia} onOpenChange={setViewingMedia}>
