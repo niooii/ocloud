@@ -35,7 +35,6 @@ export function FileExplorer() {
     const [files, setFiles] = useState<SFile[] | null>([]);
     const [viewingMedia, setViewingMedia] = useState(false);
     const [selectedFile, setSelectedFile] = useState<SFile | null>(null);
-    const [media, setMedia] = useState<Promise<Blob | null> | null>(null);
 
     useEffect(() => {
         api.listDir(cwd).then(fs => {
@@ -50,7 +49,7 @@ export function FileExplorer() {
             if (!fs) {
                 errorToast(
                     "Something went wrong..",
-                    "Check your internet connection and the server availability.",
+                    "Check your internet connection and the server's availability.",
                 );
             } else {
                 // we do this at the same time for visual sync reasons
@@ -68,8 +67,6 @@ export function FileExplorer() {
         } else {
             setSelectedFile(file);
             setViewingMedia(true);
-            const promise = api.getMedia(file);
-            setMedia(promise);
         }
     };
 
@@ -168,9 +165,9 @@ export function FileExplorer() {
                                 {getFileIcon(selectedFile?.topLevelName)}
                                 {selectedFile?.topLevelName} 
                             </DialogTitle>
-                            {media && (
+                            {viewingMedia && (
                                 <MediaViewer 
-                                future={media} 
+                                file={selectedFile!} 
                                 filename={selectedFile?.topLevelName} 
                                 />
                             )}

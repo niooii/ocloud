@@ -3,22 +3,26 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Image as ImageIcon, File, Loader2 } from "lucide-react";
 import { getFileIcon } from "./utils";
 import ReactPlayer from 'react-player/lazy'
+import { MediaApi, SFile } from "@/lib/api/media";
+import { getServerUrl } from "@/lib/include";
 
-interface BlobViewerProps {
-  future: Promise<Blob | null>;
+interface MediaViewerProps {
+  file: SFile;
   filename?: string;
 }
 
-export default function MediaViewer({ future, filename }: BlobViewerProps) {
+export default function MediaViewer({ file, filename }: MediaViewerProps) {
   const [state, setState] = React.useState<"loading" | "error" | "success">("loading");
   const [content, setContent] = React.useState<string | null>(null);
   const [type, setType] = React.useState<"image" | "text" | "video" | "other">("other");
   const [blob, setBlob] = React.useState<Blob | null>(null);
 
+  const api = new MediaApi(getServerUrl()!);
+
   useEffect(() => {
     const loadBlob = async () => {
       try {
-        const result = await future;
+        const result = await api.getMedia(file);
         if (!result) {
           setState("error");
           return;
@@ -42,7 +46,7 @@ export default function MediaViewer({ future, filename }: BlobViewerProps) {
     };
 
     loadBlob();
-  }, [future]);
+  }, [file]);
 
   const renderContent = () => {
     switch (state) {
