@@ -114,7 +114,6 @@ export function FileExplorer() {
     } 
 
     const onRowClick = (_e: MouseEvent<HTMLTableRowElement>, file: SFile) => {
-        setSortMethod("datemodified");
         console.log(`${file.topLevelName}`);
         if (file.isDir) {
             const newDir = cwd.joinStr(file.topLevelName)!.asDir();
