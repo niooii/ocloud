@@ -12,7 +12,7 @@ import {
     } from "@/components/ui/table"
 import { Path } from "@/lib/api/path"
 import { SFile } from "@/lib/api/media"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { EllipsisVertical, FolderIcon, Slash } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
@@ -25,10 +25,18 @@ import {
 } from "@/components/ui/dialog";
 import { MediaApi } from "@/lib/api/media"
 import { errorToast, getServerUrl } from "@/lib/include"
-import BlobViewer from "./media_viewer"
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
 import MediaViewer from "./media_viewer"
 import FileDropArea from "@/components/client/file_dropper"
 import FileUploader from "./upload"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+
+type SortMethod = "name" | "size" | "datemodified";
 
 export function FileExplorer() {
     const [cwd, setCwd] = useState(
@@ -37,15 +45,18 @@ export function FileExplorer() {
     const [files, setFiles] = useState<SFile[] | null>([]);
     const [viewingMedia, setViewingMedia] = useState(false);
     const [selectedFile, setSelectedFile] = useState<SFile | null>(null);
+    const [sortMethod, setSortMethod] = useState<SortMethod>("name");
+    const [sortDirection, setSortDirection] = useState<boolean>(false);
 
     useEffect(() => {
-        api.listDir(cwd).then(fs => {
-            setFiles(fs);
-        });
+        updateCwdAndFiles(cwd);
     }, []);
 
-    const api = new MediaApi(getServerUrl()!);
+    useEffect(() => {
+        setFiles(sortFileList(files!, sortMethod, sortDirection));
+    }, [sortMethod, sortDirection]);
 
+    const api = new MediaApi(getServerUrl()!);
     const updateCwdAndFiles = (newDir: Path) => {
         api.listDir(newDir).then(fs => {
             if (!fs) {
@@ -55,13 +66,50 @@ export function FileExplorer() {
                 );
             } else {
                 // we do this at the same time for visual sync reasons
-                setFiles(fs);
+                setFiles(sortFileList(fs, "name"));
                 setCwd(newDir);
             }
         });
     }
 
+    const sortFileList = (files: SFile[], method: SortMethod, reverse: boolean = false): SFile[] => {
+        const [dirs, sfiles] = files.reduce((acc, file) => {
+            acc[file.isDir ? 0 : 1].push(file);
+            return acc;
+        }, [[] as SFile[], [] as SFile[]]);
+        
+        let sortFunc: ((a: SFile, b: SFile) => number) | undefined;
+        switch (sortMethod) {
+            case "name": {
+                sortFunc = (a: SFile, b: SFile) => {
+                    return a.topLevelName.localeCompare(b.topLevelName);
+                };
+                break;
+            }
+            case "datemodified": {
+                sortFunc = (a: SFile, b: SFile) => {
+                    return b.modifiedAt.getTime() - a.modifiedAt.getTime();
+                };
+                break;
+            }
+            case "size": {
+                // TODO! shit aint implemented
+                sortFunc = (a: SFile, b: SFile) => {
+                    return b.modifiedAt.getTime() - a.modifiedAt.getTime();
+                };
+                break;
+            }
+        }
+
+        dirs.sort(sortFunc);
+        sfiles.sort(sortFunc);
+        
+        const newFiles = [...dirs, ...sfiles];
+        return newFiles;
+    } 
+
     const onRowClick = (e: MouseEvent<HTMLTableRowElement>, file: SFile) => {
+        setSortMethod("datemodified");
         console.log(`${file.topLevelName}`);
         if (file.isDir) {
             const newDir = cwd.joinStr(file.topLevelName)!.asDir();
@@ -73,24 +121,65 @@ export function FileExplorer() {
     };
 
     const onFileUpload = (files_to_upload: FileList) => {
-        console.log(files_to_upload);
         const uploadTo = cwd.clone();
         for (let i = 0; i < files_to_upload.length; i++) {
             const file = files_to_upload[i];
             api.uploadFile(uploadTo, file).then((sfile) => {
-                if (sfile && uploadTo.equals(cwd)) {
+                if (!sfile) {
+                    console.log("something HAPPENED");
+                    return;
+                }
+                if (uploadTo.equals(cwd)) {
                     const newFiles = [...files!, sfile];
-                    console.log(newFiles);
                     setFiles(newFiles);
-                    console.log("work");
                 }
             });
-            console.log("started upload");
         }
+    }
+
+    const [dirInput, setDirInput] = useState<string | null>(null);
+    const [dirInputOpen, setDirInputOpen] = useState<boolean>(false);
+
+    const onDirCreatePress = () => {
+        if (!dirInput) 
+            return;
+        const targetDir = cwd.clone();
+        api.mkDirs(cwd.joinStr(dirInput)!).then((createdDirs) => {
+            if (!createdDirs) {
+                console.log("SOMETHIGN HAPPENED");
+                return;
+            }
+            if (createdDirs.length == 0) 
+                return;
+            if (targetDir.equals(cwd)) {
+                // Find a newly created folder on the same level as the cwd
+                // if it exists update ui
+                const target = createdDirs[0];
+                if (cwd.getPathParts().length 
+                    === target.fullPath.getPathParts().length - 1) {
+                    const newFiles = [...files!, target];
+                    setFiles(newFiles);
+                    setDirInputOpen(false);
+                }
+            }
+        })
     }
 
     return (
         <>
+        <Popover open={dirInputOpen} onOpenChange={setDirInputOpen}>
+            <PopoverTrigger asChild>
+                <Button variant="outline">New Folder</Button>
+            </PopoverTrigger>
+            <PopoverContent className="flex flex-col items-center space-y-4 w-full">
+                <Input enterKeyHint="enter" onChange={(e) => {
+                    setDirInput(e.target.value);
+                }}/>
+                <Button variant="outline" onClick={onDirCreatePress}>
+                    Finish.
+                </Button>
+            </PopoverContent>
+        </Popover>
         <div className="w-full max-w-7xl flex-col">
             <Breadcrumb className="py-2">
                 <BreadcrumbList>
