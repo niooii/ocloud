@@ -328,7 +328,7 @@ impl FileControllerInner {
     /// Create all directories. If vpath is a directory, it will create that too, otherwise it will
     /// just create up to the deepest parent.
     /// Could do it in one query,
-    /// Also not adding a transacted variant since it shouldnt matter, and bad for concurrency.
+    /// TODO! make transacted you idiot (me)
     /// Returns a vec of all the files newly created.
     pub async fn make_all_dirs(&self, vpath: &VirtualPath) -> ServerResult<Vec<SFile>> {
         let mut parts = vpath.path_parts_no_root();
@@ -357,6 +357,20 @@ impl FileControllerInner {
         }
 
         Ok(vec)
+    }
+
+    /// Returns the file after the move.
+    pub async fn mv(
+        &self,
+        from: &VirtualPath,
+        to: &VirtualPath
+    ) -> ServerResult<SFile> {
+        if from.is_dir() {
+            // it doesnt make sense to move a dir to a file, so treat the dest like a dir.
+            let to = to.as_dir()
+        }
+
+        todo!()
     }
 
     pub async fn path_info(

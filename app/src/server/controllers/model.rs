@@ -111,7 +111,7 @@ fn check_is_dir(path: &PathBuf) -> bool {
 }
 
 #[derive(Debug)]
-/// A path that points to a file on the host machines filesystem, used to access uploaded content.
+/// A path that references a file on the host machines filesystem, used to access uploaded content.
 /// The path can never be empty.
 pub struct VirtualPath {
     path: PathBuf,
@@ -175,6 +175,34 @@ impl VirtualPath {
             format!("{dir_name}/")
         );
         Ok(())
+    }
+
+    pub fn to_dir(&mut self) {
+        if !self.is_dir {
+            self.is_dir = true;
+            self.path = format!("{}/", self.to_string()).into();
+        }
+    }
+
+    pub fn to_file(&mut self) {
+        if self.is_dir {
+            self.is_dir = false;
+            self.path = self.to_string().into();
+        }
+    }
+
+    pub fn as_dir(&self) -> Self {
+        Self {
+            path: format!("{}/", self.to_string()).into(),
+            is_dir: true
+        }
+    }
+
+    pub fn as_file(&self) -> Self {
+        Self {
+            path: self.to_string().into(),
+            is_dir: false
+        }
     }
 
     pub fn file_name(&self) -> Option<String> {
