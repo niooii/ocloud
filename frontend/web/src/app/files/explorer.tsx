@@ -72,18 +72,20 @@ export function FileExplorer() {
         }
     };
 
-    const onFileUpload = (files: FileList) => {
-        console.log(files);
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            const uploadTo = cwd.clone();
-            api.uploadFile(uploadTo, file).then(() => {
-                if (uploadTo == cwd) {
-                    updateCwdAndFiles(cwd);
-                    // TODO! make the endpoint return the created sfile. this is stupid
+    const onFileUpload = (files_to_upload: FileList) => {
+        console.log(files_to_upload);
+        const uploadTo = cwd.clone();
+        for (let i = 0; i < files_to_upload.length; i++) {
+            const file = files_to_upload[i];
+            api.uploadFile(uploadTo, file).then((sfile) => {
+                if (sfile && uploadTo.equals(cwd)) {
+                    const newFiles = [...files!, sfile];
+                    console.log(newFiles);
+                    setFiles(newFiles);
                     console.log("work");
                 }
             });
+            console.log("started upload");
         }
     }
 

@@ -164,6 +164,19 @@ class MediaCache {
     }
 }
 
+function sfile_from_raw(raw: SFileRaw): SFile {
+    return {
+        id: raw.id,
+        isDir: raw.is_dir,
+        fullPath: new Path(raw.full_path),
+        createdAt: new Date(raw.created_at),
+        modifiedAt: new Date(raw.modified_at),
+        // Either the name of the directory or the file
+        topLevelName: raw.top_level_name,
+        referencesMediaId: raw.media_id
+    };
+}
+
 export class MediaApi extends BaseClient {
     private cache = new MediaCache();
 
@@ -183,18 +196,7 @@ export class MediaApi extends BaseClient {
         if (!raw)
             return null;
 
-        return raw.map((raw): SFile => {
-            return {
-                id: raw.id,
-                isDir: raw.is_dir,
-                fullPath: new Path(raw.full_path),
-                createdAt: new Date(raw.created_at),
-                modifiedAt: new Date(raw.modified_at),
-                // Either the name of the directory or the file
-                topLevelName: raw.top_level_name,
-                referencesMediaId: raw.media_id
-            };
-        });
+        return raw.map(sfile_from_raw);
     }
 
     async getMedia(file: SFile, useCache: boolean = true): Promise<Blob | null> {
@@ -238,12 +240,32 @@ export class MediaApi extends BaseClient {
         const uploadPath = dir.asDir();
         const formData = new FormData();
         formData.append(file.name, file);
-        return await this.request<SFile>(
+        const raw = await this.request<SFileRaw[]>(
             `/files/${uploadPath}`, 
             {
                 method: "POST",
                 body: formData,
             }
         );
+
+        if (!raw)
+            return null;
+
+        return sfile_from_raw(raw[0]);
+    }
+
+    async mkDirs(dir: Path): Promise<SFile[] | null> {
+        const uploadPath = dir.asDir();
+        const raw = await this.request<SFileRaw[]>(
+            `/files/${uploadPath}`, 
+            {
+                method: "POST",
+            }
+        );
+
+        if (!raw)
+            return null;
+
+        return raw.map(sfile_from_raw);
     }
 }
