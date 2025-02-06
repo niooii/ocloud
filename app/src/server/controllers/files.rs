@@ -325,16 +325,18 @@ impl FileControllerInner {
         res
     }
 
-    // Create all directories. If vpath is a directory, it will create that too, otherwise it will
-    // just create up to the deepest parent.
-    // Could do it in one query,
-    // Also not adding a transacted variant since it shouldnt matter, and bad for concurrency
-    pub async fn make_all_dirs(&self, vpath: &VirtualPath) -> ServerResult<()> {
+    /// Create all directories. If vpath is a directory, it will create that too, otherwise it will
+    /// just create up to the deepest parent.
+    /// Could do it in one query,
+    /// Also not adding a transacted variant since it shouldnt matter, and bad for concurrency.
+    /// Returns a vec of all the files newly created.
+    pub async fn make_all_dirs(&self, vpath: &VirtualPath) -> ServerResult<Vec<SFile>> {
         let mut parts = vpath.path_parts_no_root();
         if !vpath.is_dir() {
             parts.pop();
         }
         let mut curr = VirtualPath::root();
+        let mut vec = Vec::with_capacity(parts.len());
 
         for part in parts {
             curr.push_dir(part).expect("should never happen, again");
@@ -343,15 +345,18 @@ impl FileControllerInner {
                 .make_dir(&curr, None)
                 .await;
 
-            if let Err(e) = create_res {
-                match e {
-                    ServerError::PathAlreadyExists => continue,
-                    _ => return Err(e) 
-                }
+            match create_res {
+                Err(e) => {
+                    match e {
+                        ServerError::PathAlreadyExists => continue,
+                        _ => return Err(e) 
+                    }
+                },
+                Ok(s) => vec.push(s)
             }
         }
 
-        Ok(())
+        Ok(vec)
     }
 
     pub async fn path_info(

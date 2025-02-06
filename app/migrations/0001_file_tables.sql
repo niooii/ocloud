@@ -18,9 +18,6 @@ CREATE TABLE IF NOT EXISTS sfiles (
     path_parts      TEXT[] NOT NULL,
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     modified_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_media
-        FOREIGN KEY (media_id)
-        REFERENCES media(id)
-        ON DELETE CASCADE,
-    CONSTRAINT unique_path UNIQUE (full_path)
+    FOREIGN KEY (media_id) REFERENCES media(id) ON DELETE CASCADE,
+    UNIQUE (full_path, is_dir)
 );

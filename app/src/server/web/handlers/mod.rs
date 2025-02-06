@@ -1,3 +1,3 @@
-pub mod media;
+pub mod files;
 pub mod auth;
 pub mod stream;

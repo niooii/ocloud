@@ -4,7 +4,7 @@ use axum::Router;
 use tower_http::cors::CorsLayer;
 
 use crate::server::controllers::files::FileController;
-use super::handlers::media;
+use super::handlers::files;
 
 use super::handlers::auth;
 
@@ -19,7 +19,7 @@ pub async fn routes(controller: FileController) -> Router {
         ]);
 
     Router::new()
-        .nest("/", media::routes(controller))
+        .nest("/", files::routes(controller))
         .nest("/", auth::routes())
         .route("/ping", get(ping))
         .layer(cors)
