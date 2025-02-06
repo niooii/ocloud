@@ -48,12 +48,16 @@ export function FileExplorer() {
     const [sortMethod, setSortMethod] = useState<SortMethod>("name");
     const [sortDirection, setSortDirection] = useState<boolean>(false);
 
+    const setFilesSorted = (fs: SFile[]) => {
+        setFiles(sortFileList(fs, sortMethod, sortDirection));
+    }
+
     useEffect(() => {
         updateCwdAndFiles(cwd);
     }, []);
 
     useEffect(() => {
-        setFiles(sortFileList(files!, sortMethod, sortDirection));
+        setFilesSorted(files!);
     }, [sortMethod, sortDirection]);
 
     const api = new MediaApi(getServerUrl()!);
@@ -66,7 +70,7 @@ export function FileExplorer() {
                 );
             } else {
                 // we do this at the same time for visual sync reasons
-                setFiles(sortFileList(fs, "name"));
+                setFilesSorted(fs);
                 setCwd(newDir);
             }
         });
@@ -77,25 +81,26 @@ export function FileExplorer() {
             acc[file.isDir ? 0 : 1].push(file);
             return acc;
         }, [[] as SFile[], [] as SFile[]]);
+        const m = reverse ? -1 : 1;
         
-        let sortFunc: ((a: SFile, b: SFile) => number) | undefined;
+        let sortFunc: (a: SFile, b: SFile) => number;
         switch (sortMethod) {
             case "name": {
                 sortFunc = (a: SFile, b: SFile) => {
-                    return a.topLevelName.localeCompare(b.topLevelName);
+                    return m * (a.topLevelName.localeCompare(b.topLevelName));
                 };
                 break;
             }
             case "datemodified": {
                 sortFunc = (a: SFile, b: SFile) => {
-                    return b.modifiedAt.getTime() - a.modifiedAt.getTime();
+                    return m * (b.modifiedAt.getTime() - a.modifiedAt.getTime());
                 };
                 break;
             }
             case "size": {
                 // TODO! shit aint implemented
                 sortFunc = (a: SFile, b: SFile) => {
-                    return b.modifiedAt.getTime() - a.modifiedAt.getTime();
+                    return m * (b.modifiedAt.getTime() - a.modifiedAt.getTime());
                 };
                 break;
             }
@@ -108,7 +113,7 @@ export function FileExplorer() {
         return newFiles;
     } 
 
-    const onRowClick = (e: MouseEvent<HTMLTableRowElement>, file: SFile) => {
+    const onRowClick = (_e: MouseEvent<HTMLTableRowElement>, file: SFile) => {
         setSortMethod("datemodified");
         console.log(`${file.topLevelName}`);
         if (file.isDir) {
@@ -120,10 +125,10 @@ export function FileExplorer() {
         }
     };
 
-    const onFileUpload = (files_to_upload: FileList) => {
+    const onFileUpload = (filesToUpload: FileList) => {
         const uploadTo = cwd.clone();
-        for (let i = 0; i < files_to_upload.length; i++) {
-            const file = files_to_upload[i];
+        for (let i = 0; i < filesToUpload.length; i++) {
+            const file = filesToUpload[i];
             api.uploadFile(uploadTo, file).then((sfile) => {
                 if (!sfile) {
                     console.log("something HAPPENED");
@@ -131,7 +136,7 @@ export function FileExplorer() {
                 }
                 if (uploadTo.equals(cwd)) {
                     const newFiles = [...files!, sfile];
-                    setFiles(newFiles);
+                    setFilesSorted(newFiles);
                 }
             });
         }
@@ -140,7 +145,7 @@ export function FileExplorer() {
     const [dirInput, setDirInput] = useState<string | null>(null);
     const [dirInputOpen, setDirInputOpen] = useState<boolean>(false);
 
-    const onDirCreatePress = () => {
+    const onDirCreate = () => {
         if (!dirInput) 
             return;
         const targetDir = cwd.clone();
@@ -158,7 +163,7 @@ export function FileExplorer() {
                 if (cwd.getPathParts().length 
                     === target.fullPath.getPathParts().length - 1) {
                     const newFiles = [...files!, target];
-                    setFiles(newFiles);
+                    setFilesSorted(newFiles);
                     setDirInputOpen(false);
                 }
             }
@@ -175,7 +180,7 @@ export function FileExplorer() {
                 <Input enterKeyHint="enter" onChange={(e) => {
                     setDirInput(e.target.value);
                 }}/>
-                <Button variant="outline" onClick={onDirCreatePress}>
+                <Button variant="outline" onClick={onDirCreate}>
                     Finish.
                 </Button>
             </PopoverContent>
@@ -197,12 +202,13 @@ export function FileExplorer() {
                 </BreadcrumbList>
             </Breadcrumb>
             <Card className="w-full">
-                <Table className="w-full">
+                <Table className="table-fixed">
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="w-[50%]">Name</TableHead>
-                            <TableHead className="w-[30%]">Uploaded</TableHead>
-                            <TableHead className="w-[33%] text-right">
+                            <TableHead className="w-1/3">Name</TableHead>
+                            <TableHead className="w-1/3">Uploaded</TableHead>
+                            <TableHead className="w-1/4">Details</TableHead>
+                            <TableHead className="text-right">
                             <div className="flex justify-end cursor-pointer">
                                 <EllipsisVertical className="h-4 w-4" />
                             </div>
@@ -220,17 +226,23 @@ export function FileExplorer() {
                                 prev.pop();
                                 updateCwdAndFiles(prev);
                             }}>
-                            <TableCell className="w-[50%]">
+                            <TableCell className="">
                                 <div className="flex flex-row items-center gap-2 font-medium">
                                 <FolderIcon className="h-4 w-4 text-yellow-500" />
                                 ..
                                 </div>
                             </TableCell>
-                            <TableCell className="w-[30%] text-gray-200">
+
+                            <TableCell className="text-gray-200">
                                 
                             </TableCell>
-                            <TableCell className="w-[20%] text-right">
-                            <div className="flex justify-end">
+
+                            <TableCell className="text-muted-foreground">
+                                Previous directory
+                            </TableCell>
+
+                            <TableCell className="flex justify-end">
+                            <div className="">
                                 <EllipsisVertical className="h-4 w-4" />
                             </div>
                             </TableCell>
@@ -240,31 +252,35 @@ export function FileExplorer() {
                         {
                         files ? (
                             files.map((file) => (
-                                <FileDropArea onFileUpload={() => {}}>
                                 <TableRow 
-                                    key={file.id} 
-                                    className="cursor-pointer w-full" 
-                                    onClick={(e) => onRowClick(e, file)}>
-                                        <TableCell className="w-[50%]">
-                                            <div className="flex flex-row items-center gap-2 font-medium">
-                                            {file.isDir ? (
-                                                <FolderIcon className="h-4 w-4 text-blue-500" />
-                                            ) : (
-                                                getFileIcon(file.topLevelName)
-                                            )}
-                                            {file.topLevelName}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="w-[30%] text-gray-200">
-                                            {file.createdAt.toLocaleString()}
-                                        </TableCell>
-                                        <TableCell className="w-[20%] text-right">
-                                        <div className="flex justify-end">
-                                            <EllipsisVertical className="h-4 w-4" />
+                                key={file.id} 
+                                className="cursor-pointer" 
+                                onClick={(e) => onRowClick(e, file)}>
+                                    <TableCell className="">
+                                        <div className="flex flex-row items-center gap-2 font-medium">
+                                        {file.isDir ? (
+                                            <FolderIcon className="h-4 w-4 text-blue-500" />
+                                        ) : (
+                                            getFileIcon(file.topLevelName)
+                                        )}
+                                        {file.topLevelName}
                                         </div>
-                                        </TableCell>
-                                    </TableRow>
-                                </FileDropArea>
+                                    </TableCell>
+
+                                    <TableCell className="text-gray-200">
+                                        {file.createdAt.toLocaleString()}
+                                    </TableCell>
+
+                                    <TableCell className="text-muted-foreground">
+                                        DETAILS
+                                    </TableCell>
+
+                                    <TableCell className="">
+                                    <div className="flex justify-end">
+                                        <EllipsisVertical className="h-4 w-4" />
+                                    </div>
+                                    </TableCell>
+                                </TableRow>
                             ))
                         ) : (<div>bluh</div>)
                         }
