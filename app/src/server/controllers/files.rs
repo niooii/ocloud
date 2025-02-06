@@ -107,7 +107,8 @@ impl FileControllerInner {
             
             trace!("Finalized upload: {}", true_path.to_string_lossy());  
         }
-        // stage 3: insert the symbolic file into its table
+        // stage 3: insert the symbolic file into its table after creating all dirs
+        self.make_all_dirs(&info.vpath, Some(&mut tx)).await?;
         let f = 
             self.make_file(
                 &info.vpath,
@@ -221,7 +222,6 @@ impl FileControllerInner {
             SFileCreateInfo::File { path, media_id } => (path, Some(media_id), false),
         };
 
-        let path_parts = path.path_parts();
         let full_path = path.to_string();
 
         let q = query_as!(
@@ -233,12 +233,11 @@ impl FileControllerInner {
                 path_parts,
                 is_dir
             )
-            VALUES ($1, $2, $3, $4)
+            VALUES ($1, $2, STRING_TO_ARRAY($2, '/'), $3)
             RETURNING *
             "#,
             media_id,
             full_path,
-            &path_parts,
             is_dir,
         );
         let file = if let Some(t) = transaction {
@@ -260,9 +259,6 @@ impl FileControllerInner {
         Ok(SFile::from(file))
     }
 
-
-    /// If a transaction is passed in but fails for whatever reason
-    /// all the intermediate directories will still be created (not transacted).
     pub async fn make_file(
         &self, 
         vpath: &VirtualPath, 
@@ -270,7 +266,6 @@ impl FileControllerInner {
         transaction: Option<&mut Transaction<'_, Postgres>>
     ) -> ServerResult<SFile> {
         vpath.err_if_dir()?;
-        self.make_all_dirs(vpath).await?;
         self._create_file(
             SFileCreateInfo::File { path: vpath, media_id }, 
             transaction
@@ -328,9 +323,12 @@ impl FileControllerInner {
     /// Create all directories. If vpath is a directory, it will create that too, otherwise it will
     /// just create up to the deepest parent.
     /// Could do it in one query,
-    /// TODO! make transacted you idiot (me)
     /// Returns a vec of all the files newly created.
-    pub async fn make_all_dirs(&self, vpath: &VirtualPath) -> ServerResult<Vec<SFile>> {
+    pub async fn make_all_dirs(
+        &self, 
+        vpath: &VirtualPath, 
+        transaction: Option<&mut Transaction<'_, Postgres>>
+    ) -> ServerResult<Vec<SFile>> {
         let mut parts = vpath.path_parts_no_root();
         if !vpath.is_dir() {
             parts.pop();
@@ -338,11 +336,15 @@ impl FileControllerInner {
         let mut curr = VirtualPath::root();
         let mut vec = Vec::with_capacity(parts.len());
 
+        let mut default_transaction = None;
+        let transaction = transaction
+            .unwrap_or(default_transaction.get_or_insert(self.db_pool.begin().await?));
+
         for part in parts {
             curr.push_dir(part).expect("should never happen, again");
 
             let create_res = self
-                .make_dir(&curr, None)
+                .make_dir(&curr, Some(transaction))
                 .await;
 
             match create_res {
@@ -356,10 +358,15 @@ impl FileControllerInner {
             }
         }
 
+        if let Some(t) = default_transaction {
+            t.commit().await?;
+        }
+
         Ok(vec)
     }
 
     /// Returns the file after the move.
+    /// Works with directories and single files.
     pub async fn mv(
         &self,
         from: &VirtualPath,
@@ -367,10 +374,26 @@ impl FileControllerInner {
     ) -> ServerResult<SFile> {
         if from.is_dir() {
             // it doesnt make sense to move a dir to a file, so treat the dest like a dir.
-            let to = to.as_dir()
+            let to = to.as_dir();
+            query!(
+                ""
+            )
+            todo!();
+        } else {
+            query_as!(
+                SFileRow, 
+                r"UPDATE sfiles
+                SET full_path = $1, path_parts = STRING_TO_ARRAY($1, '/')
+                WHERE full_path = $2 AND is_dir = false
+                RETURNING *",
+                to.to_string(),
+                from.to_string()
+            )
+                .fetch_optional(&self.db_pool).await
+                .map_err(ServerError::from)
+                .and_then(|opt| opt.ok_or(ServerError::PathDoesntExist))
+                .map(SFile::from)
         }
-
-        todo!()
     }
 
     pub async fn path_info(

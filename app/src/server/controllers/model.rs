@@ -126,6 +126,16 @@ impl VirtualPath {
         }
     }
 
+    pub fn child_of(&self, other: &Self) -> bool {
+        let self_path = self.to_string();
+        let other_path = other.to_string();
+
+        // TODO! see if self contains other, if yes then
+        // split self at others's length and see if it starts with a slash. if yes then
+        // self is a child of other
+        self_path.split_off(at)
+    }
+
     pub fn path_parts(&self) -> Vec<String> {
         self.path.components()
             .map(|comp| comp.as_os_str().to_string_lossy().to_string())

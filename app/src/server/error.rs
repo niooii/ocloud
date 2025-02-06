@@ -14,6 +14,7 @@ pub enum ServerError {
     Error { why: String },
     NoMediaFound,
     WrongPathType { why: String },
+    BadOperation { why: String },
     PathDoesntExist,
     PathAlreadyExists
 }

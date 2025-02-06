@@ -1,5 +1,6 @@
 use std::{io::Write, path::PathBuf, sync::{Arc, Mutex}, time::{SystemTime, UNIX_EPOCH}};
-use axum::{body::Body, extract::{DefaultBodyLimit, Multipart, Path, Query, State}, http::{header, HeaderValue}, response::Response, routing::get, Json, Router};
+use axum::{body::Body, extract::{DefaultBodyLimit, Multipart, Path, Query, State}, http::{header, HeaderValue}, response::Response, routing::{get, patch}, Json, Router};
+use serde::Deserialize;
 use crate::{config::SERVER_CONFIG, server::controllers::model::SFile};
 use tokio::{fs::File, io::AsyncWriteExt, sync::Notify};
 use sha2::{Digest, Sha256};
@@ -23,7 +24,25 @@ pub fn routes(controller: FileController) -> Router {
                     DefaultBodyLimit::disable()
                 }
             )
-        ).with_state(controller)
+        ).route(
+            "/files", 
+            patch(move_files)
+        )
+        .with_state(controller)
+}
+
+#[derive(Deserialize)]
+pub struct MoveInfo {
+    pub from: VirtualPath,
+    pub to: VirtualPath
+}
+
+pub async fn move_files(
+    State(files): State<FileController>,
+    Json(move_info): Json<MoveInfo>
+) -> ServerResult<Json<SFile>> {
+    files.mv(&move_info.from, &move_info.to).await
+    .map(Json)
 }
 
 pub async fn upload_or_mk_dirs(
@@ -112,7 +131,7 @@ pub async fn upload_or_mk_dirs(
     }
 
     // either no content in multipart or not multipart. thats okay, just make the directory.
-    files.make_all_dirs(&path).await.map(Json)
+    files.make_all_dirs(&path, None).await.map(Json)
 }
 
 pub async fn get_file_or_list_dir(
