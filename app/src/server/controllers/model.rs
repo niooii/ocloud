@@ -143,12 +143,8 @@ impl VirtualPath {
         // split self at others's length and see if it starts with a slash. if yes then
         // self is a child of other
         if self_path.contains(&other_path) {
-            if self_path[other_path.len()..].chars().next()
-            .expect("Expected length check to work idiot") == '/' {
-                true
-            } else {
-                false
-            }
+            self_path[other_path.len()..].chars().next()
+            .expect("Expected length check to work idiot") == '/'
         } else {
             false
         }
