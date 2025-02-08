@@ -13,8 +13,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Clone, Debug)]
 pub enum Error {
-    FileReadError { err: String },
     DeserializeError,
+    FileReadError { err: String },
     SerializeError
 }
 

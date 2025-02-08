@@ -377,7 +377,7 @@ impl FileControllerInner {
             let to = to.as_dir();
             query!(
                 ""
-            )
+            );
             todo!();
         } else {
             query_as!(

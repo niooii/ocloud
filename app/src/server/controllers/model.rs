@@ -126,14 +126,32 @@ impl VirtualPath {
         }
     }
 
+    /// A path is never a child of itself.
     pub fn child_of(&self, other: &Self) -> bool {
+        if !other.is_dir {
+            return false;
+        }
+ 
         let self_path = self.to_string();
         let other_path = other.to_string();
+
+        if self_path.len() <= other_path.len() {
+            return false;
+        }
 
         // TODO! see if self contains other, if yes then
         // split self at others's length and see if it starts with a slash. if yes then
         // self is a child of other
-        self_path.split_off(at)
+        if self_path.contains(&other_path) {
+            if self_path[other_path.len()..].chars().next()
+            .expect("Expected length check to work idiot") == '/' {
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
     }
 
     pub fn path_parts(&self) -> Vec<String> {
