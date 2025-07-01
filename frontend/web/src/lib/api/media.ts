@@ -165,10 +165,11 @@ class MediaCache {
 }
 
 function sfile_from_raw(raw: SFileRaw): SFile {
+    let path = new Path(raw.full_path);
     return {
         id: raw.id,
         isDir: raw.is_dir,
-        fullPath: new Path(raw.full_path),
+        fullPath: raw.is_dir ? path.asDir() : path.asFile(),
         createdAt: new Date(raw.created_at),
         modifiedAt: new Date(raw.modified_at),
         // Either the name of the directory or the file
@@ -267,5 +268,20 @@ export class MediaApi extends BaseClient {
             return null;
 
         return raw.map(sfile_from_raw);
+    }
+
+    async moveFile(sourceFile: SFile, targetDir: Path): Promise<boolean> {
+        const fromPath = sourceFile.fullPath.toString();
+        let toPath = targetDir.asDir().toString() + sourceFile.topLevelName;
+        if (sourceFile.isDir) toPath += "/";
+        const res = await fetch(`${this.serverUrl}/files`, {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json",
+                ...(localStorage.getItem('OCLOUD_AUTH') ? { "Authorization": `Bearer ${localStorage.getItem('OCLOUD_AUTH')}` } : {})
+            },
+            body: JSON.stringify({ from: fromPath, to: toPath })
+        });
+        return res.ok;
     }
 }

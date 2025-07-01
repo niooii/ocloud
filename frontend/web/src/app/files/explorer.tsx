@@ -17,7 +17,7 @@ import { EllipsisVertical, FolderIcon, Slash } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import { getFileIcon } from "./utils"
-import { MouseEvent } from 'react'; 
+import { MouseEvent, DragEvent } from 'react'; 
 import {
     Dialog,
     DialogContent,
@@ -47,6 +47,8 @@ export function FileExplorer() {
     const [selectedFile, setSelectedFile] = useState<SFile | null>(null);
     const [sortMethod, setSortMethod] = useState<SortMethod>("name");
     const [sortDirection, setSortDirection] = useState<boolean>(false);
+    const [draggedFile, setDraggedFile] = useState<SFile | null>(null);
+    const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
 
     const setFilesSorted = (fs: SFile[]) => {
         setFiles(sortFileList(fs, sortMethod, sortDirection));
@@ -169,8 +171,93 @@ export function FileExplorer() {
         })
     }
 
+    const handleDragStart = (e: DragEvent<HTMLTableRowElement>, file: SFile) => {
+        setDraggedFile(file);
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", file.id.toString());
+    };
+
+    const handleDragEnd = () => {
+        setDraggedFile(null);
+        setDragOverFolder(null);
+    };
+
+    const handleDragOver = (e: DragEvent<HTMLTableRowElement>, folderName?: string) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (folderName) {
+            setDragOverFolder(folderName);
+        }
+    };
+
+    const handleDragLeave = () => {
+        setDragOverFolder(null);
+    };
+
+    const handleDrop = async (e: DragEvent<HTMLTableRowElement>, targetFolder?: SFile) => {
+        e.preventDefault();
+        setDragOverFolder(null);
+        if (!draggedFile) return;
+
+        // Determine the target path
+        let toPath: string | undefined = undefined;
+        if (targetFolder && targetFolder.isDir) {
+            // Move into the folder (ensure trailing slash)
+            toPath = targetFolder.fullPath.asDir().toString() + draggedFile.topLevelName;
+            if (draggedFile.isDir) toPath += "/";
+        }
+        if (targetFolder && !targetFolder.isDir) {
+            // Not allowed to drop onto a file
+            return;
+        }
+        // If dropping on ".." (parent directory)
+        if (!targetFolder && dragOverFolder === "..") {
+            const prev = cwd.clone();
+            prev.pop();
+            toPath = prev.asDir().toString() + draggedFile.topLevelName;
+            if (draggedFile.isDir) toPath += "/";
+        }
+        if (!toPath) return;
+
+        // Use PATCH and the correct payload
+        const fromPath = draggedFile.fullPath.toString();
+        const apiUrl = `/files`;
+        const serverUrl = getServerUrl();
+        try {
+            const res = await fetch(`${serverUrl}${apiUrl}`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(localStorage.getItem('OCLOUD_AUTH') ? { "Authorization": `Bearer ${localStorage.getItem('OCLOUD_AUTH')}` } : {})
+                },
+                body: JSON.stringify({ from: fromPath, to: toPath })
+            });
+            if (res.ok) {
+                // Remove the file/folder from current view
+                const updatedFiles = files!.filter(f => f.id !== draggedFile.id);
+                setFilesSorted(updatedFiles);
+                // Optionally, refresh the target folder if it's the current cwd
+                // Show success message
+                console.log(`Moved ${draggedFile.topLevelName} to ${toPath}`);
+            } else {
+                errorToast(
+                    "Move failed",
+                    `Failed to move ${draggedFile.topLevelName} to ${toPath}`
+                );
+            }
+        } catch (err) {
+            errorToast("Move failed", String(err));
+        }
+        setDraggedFile(null);
+    };
+
     return (
         <>
+        {draggedFile && (
+            <div className="fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-md shadow-lg z-50">
+                Dragging: {draggedFile.topLevelName}
+            </div>
+        )}
         <Popover open={dirInputOpen} onOpenChange={setDirInputOpen}>
             <PopoverTrigger asChild>
                 <Button variant="outline">New Folder</Button>
@@ -201,6 +288,9 @@ export function FileExplorer() {
                 </BreadcrumbList>
             </Breadcrumb>
             <Card className="w-full">
+                <div className="p-4 text-sm text-muted-foreground border-b">
+                    💡 Tip: You can drag files into folders to move them
+                </div>
                 <Table className="table-fixed">
                     <TableHeader>
                         <TableRow>
@@ -219,7 +309,12 @@ export function FileExplorer() {
                         (!cwd.isRoot()) && (
                             <TableRow 
                             key={"prev"} 
-                            className="cursor-pointer" 
+                            className={`cursor-pointer ${
+                                dragOverFolder === ".." ? 'bg-blue-100 dark:bg-blue-900' : ''
+                            }`}
+                            onDragOver={(e) => handleDragOver(e, "..")}
+                            onDragLeave={handleDragLeave}
+                            onDrop={(e) => handleDrop(e, undefined)}
                             onClick={(e) => {
                                 const prev = cwd.clone();
                                 prev.pop();
@@ -253,7 +348,17 @@ export function FileExplorer() {
                             files.map((file) => (
                                 <TableRow 
                                 key={file.id} 
-                                className="cursor-pointer" 
+                                className={`cursor-pointer ${
+                                    draggedFile?.id === file.id ? 'opacity-50' : ''
+                                } ${
+                                    dragOverFolder === file.topLevelName && file.isDir ? 'bg-blue-100 dark:bg-blue-900' : ''
+                                }`}
+                                draggable={true}
+                                onDragStart={(e) => handleDragStart(e, file)}
+                                onDragEnd={handleDragEnd}
+                                onDragOver={(e) => handleDragOver(e, file.isDir ? file.topLevelName : undefined)}
+                                onDragLeave={handleDragLeave}
+                                onDrop={(e) => handleDrop(e, file)}
                                 onClick={(e) => onRowClick(e, file)}>
                                     <TableCell className="">
                                         <div className="flex flex-row items-center gap-2 font-medium">

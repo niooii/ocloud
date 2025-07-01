@@ -1,3 +1,5 @@
+// model.rs
+
 use std::{future::Future, path::{Path, PathBuf}, pin::Pin};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::de::Error as err;
@@ -14,7 +16,7 @@ use crate::{config::SERVER_CONFIG, server::error::{ServerError, ServerResult}};
 use super::{files::FileController};
 
 // A row from the database.
-#[derive(FromRow)]
+#[derive(FromRow, Debug)]
 pub struct Media {
     pub id: i64,
     pub uploaded_time: NaiveDateTime,
@@ -65,24 +67,45 @@ pub struct SFile {
     pub id: u64,
     pub media_id: Option<u64>,
     pub is_dir: bool,
-    pub full_path: String,
+    pub full_path: String,  // Computed when needed, not stored in DB
     pub created_at: DateTime<Utc>,
     pub modified_at: DateTime<Utc>,
     // Either the name of the directory or the file
     pub top_level_name: String
 }
 
-// A row from the database.
+// A row from the sfiles table (new schema - no paths stored)
 #[derive(Serialize, FromRow)]
 pub struct SFileRow {
     pub id: i64,
-    pub path_parts: Vec<String>,
+    pub media_id: Option<i64>,
     pub is_dir: bool,
-    pub full_path: String,
     // times will always be in UTC
     pub created_at: NaiveDateTime,
     pub modified_at: NaiveDateTime,
+}
+
+// A row from the sfile_entries table
+#[derive(Serialize, FromRow)]
+pub struct SFileEntryRow {
+    pub id: i64,
+    pub parent_sfile_id: Option<i64>,
+    pub filename: String,
+    pub child_sfile_id: i64,
+}
+
+// Helper struct for joining sfiles with their entry info
+#[derive(FromRow)]
+pub struct SFileWithEntry {
+    // From sfiles table
+    pub id: i64,
     pub media_id: Option<i64>,
+    pub is_dir: bool,
+    pub created_at: NaiveDateTime,
+    pub modified_at: NaiveDateTime,
+    // From sfile_entries table
+    pub filename: String,
+    pub parent_sfile_id: Option<i64>,
 }
 
 impl From<SFileRow> for SFile {
@@ -97,11 +120,24 @@ impl From<&SFileRow> for SFile {
             id: value.id as u64,
             media_id: value.media_id.map(|id| id as u64),
             is_dir: value.is_dir,
-            full_path: value.full_path.clone(),
+            full_path: String::new(), // Will be populated separately
             created_at: value.created_at.and_utc(),
             modified_at: value.modified_at.and_utc(),
-            top_level_name: value.path_parts.last()
-                .expect("if path parts is empty, something went very wrong").clone()
+            top_level_name: String::new(), // Will be populated separately
+        }
+    }
+}
+
+impl From<SFileWithEntry> for SFile {
+    fn from(value: SFileWithEntry) -> Self {
+        Self {
+            id: value.id as u64,
+            media_id: value.media_id.map(|id| id as u64),
+            is_dir: value.is_dir,
+            full_path: String::new(), // Will be computed by controller
+            created_at: value.created_at.and_utc(),
+            modified_at: value.modified_at.and_utc(),
+            top_level_name: value.filename,
         }
     }
 }
@@ -233,6 +269,56 @@ impl VirtualPath {
         self.path.file_name().map(|s| s.to_string_lossy().to_string())
     }
 
+    /// Get just the name component (filename or directory name)
+    pub fn name(&self) -> Option<String> {
+        if self.is_root() {
+            return Some("root".to_string());
+        }
+        
+        let parts = self.path_parts_no_root();
+        if parts.is_empty() {
+            return None;
+        }
+        
+        let last_part = parts.last().unwrap();
+        if self.is_dir && last_part.is_empty() {
+            // Handle trailing slash case
+            if parts.len() > 1 {
+                Some(parts[parts.len() - 2].clone())
+            } else {
+                None
+            }
+        } else {
+            Some(last_part.clone())
+        }
+    }
+
+    /// Get the parent directory path
+    pub fn parent(&self) -> Option<VirtualPath> {
+        if self.is_root() {
+            return None;
+        }
+        
+        let parts = self.path_parts_no_root();
+        if parts.is_empty() {
+            return None;
+        }
+        
+        if parts.len() == 1 {
+            return Some(VirtualPath::root());
+        }
+        
+        let mut parent_parts = parts;
+        if self.is_dir() {
+            parent_parts.pop(); // Remove the current directory name
+        } else {
+            parent_parts.pop(); // Remove the file name
+        }
+        
+        let parent_path = format!("root/{}/", parent_parts.join("/"));
+        Some(VirtualPath::from(parent_path))
+    }
+
     /// Like to_string, but keeps the trailing '/' if it is a directory.
     pub fn to_string_with_trailing(&self) -> String {
         self.path.as_os_str().to_string_lossy().into_owned()
@@ -306,12 +392,6 @@ pub struct FileUploadInfo {
     pub file_hash: String,
     pub vpath: VirtualPath
 }           
-
-// pub struct MediaAccessInfo {
-//     pub id: i64,
-//     pub file_name: String,
-//     pub file_hash: String
-// }
 
 // Global configuration settings
 #[derive(Deserialize, Debug)]
