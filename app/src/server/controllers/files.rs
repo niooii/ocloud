@@ -154,6 +154,34 @@ impl FileControllerInner {
         Ok(current_sfile_id)
     }
 
+    async fn resolve_path_to_sfile_id_tx(
+        &self, 
+        vpath: &VirtualPath, 
+        tx: &mut Transaction<'_, Postgres>
+    ) -> ServerResult<i64> {
+        if vpath.is_root() {
+            return Ok(1);
+        }
+        let parts = vpath.path_parts_no_root();
+        let mut current_sfile_id: i64 = 1; // Start at root
+        for part in parts {
+            let result = query!(
+                r"SELECT se.child_sfile_id, sf.is_dir
+                FROM sfile_entries se
+                JOIN sfiles sf ON se.child_sfile_id = sf.id
+                WHERE se.parent_sfile_id = $1
+                AND se.filename = $2",
+                current_sfile_id,
+                part
+            ).fetch_optional(&mut **tx).await?;
+            match result {
+                Some(row) => current_sfile_id = row.child_sfile_id,
+                None => return Err(ServerError::PathDoesntExist),
+            }
+        }
+        Ok(current_sfile_id)
+    }
+
     /// Wipes all the files stored. Very destructive.
     pub async fn wipe(&self) -> ServerResult<()> {
         let mut tx = self.db_pool.begin().await?;
@@ -272,7 +300,7 @@ impl FileControllerInner {
                 .ok_or(ServerError::PathDoesntExist)?
             } else {
                 // Resolve parent path to its id
-                self.resolve_path_to_sfile_id(&parent_path).await?
+                self.resolve_path_to_sfile_id_tx(&parent_path, tx).await?
             };
 
             let filename = if path.is_root() {
@@ -416,20 +444,28 @@ impl FileControllerInner {
 
         for part in parts {
             curr.push_dir(part).expect("should never happen, again");
+            // check if directory already exists 
+            let exists = self.path_info_transacted(&curr, transaction).await
+            .map(|sfile| sfile.is_dir);
+
+            let exists = match exists {
+                Ok(bool) => bool,
+                Err(e) => match e {
+                    ServerError::PathDoesntExist => false,
+                    _ => return Err(e)
+                }
+            };
+
+            if exists {
+                trace!("Directory already exists, skipping: {curr:?}");
+                continue;
+            }
 
             let create_res = self
                 .make_dir(&curr, Some(transaction))
                 .await;
 
-            match create_res {
-                Err(e) => {
-                    match e {
-                        ServerError::PathAlreadyExists => continue,
-                        _ => return Err(e) 
-                    }
-                },
-                Ok(s) => vec.push(s)
-            }
+            vec.push(create_res?);
         }
 
         if let Some(t) = default_transaction {
@@ -452,12 +488,22 @@ impl FileControllerInner {
 
         let to_dir_id = self.resolve_path_to_sfile_id(&to.parent().unwrap_or(VirtualPath::root())).await?;
         
+        if from.is_root() {
+            return Err(ServerError::BadOperation { why: "Cannot move the root directory".into() })
+        }
+
+        if to.child_of(from) {
+            return Err(ServerError::BadOperation { 
+                why: "Cannot move directory into itself or its descendants".into() 
+            });
+        }
+
         let result = query_as!(
             SFileRow,
             r"WITH updated AS (
                 UPDATE sfile_entries 
                 SET filename = $1, parent_sfile_id = $2
-                WHERE parent_sfile_id = $3 AND filename = $4
+                WHERE child_sfile_id = $3
                 RETURNING child_sfile_id
             )
             SELECT sf.*
@@ -465,8 +511,7 @@ impl FileControllerInner {
             WHERE sf.id = updated.child_sfile_id",
             to.name(),
             to_dir_id,
-            from_id,
-            from.name()
+            from_id
         ).fetch_optional(&self.db_pool).await?
         .ok_or(ServerError::PathDoesntExist)?;
 
@@ -480,7 +525,7 @@ impl FileControllerInner {
     pub async fn path_info(
         &self, 
         vpath: &VirtualPath
-    ) -> ServerResult<Option<SFile>> {
+    ) -> ServerResult<SFile> {
         let sfile_id = self.resolve_path_to_sfile_id(vpath).await?;
 
         let result = query_as!(
@@ -494,9 +539,9 @@ impl FileControllerInner {
                 let mut sfile = SFile::from(sfile_row);
                 sfile.full_path = vpath.to_string();
                 sfile.top_level_name = vpath.name().unwrap_or("".into()).to_string();
-                Ok(Some(sfile))
+                Ok(sfile)
             },
-            None => Ok(None)
+            None => Err(ServerError::PathDoesntExist)
         }
     }
 
@@ -504,8 +549,8 @@ impl FileControllerInner {
         &self, 
         vpath: &VirtualPath,
         transaction: &mut Transaction<'_, Postgres>
-    ) -> ServerResult<Option<SFile>> {
-        let sfile_id = self.resolve_path_to_sfile_id(vpath).await?;
+    ) -> ServerResult<SFile> {
+        let sfile_id = self.resolve_path_to_sfile_id_tx(vpath, transaction).await?;
 
         let result = query_as!(
             SFileRow,
@@ -518,9 +563,9 @@ impl FileControllerInner {
                 let mut sfile = SFile::from(sfile_row);
                 sfile.full_path = vpath.to_string();
                 sfile.top_level_name = vpath.name().unwrap_or("".into()).to_string();
-                Ok(Some(sfile))
+                Ok(sfile)
             },
-            None => Ok(None)
+            None => Err(ServerError::PathDoesntExist)
         }
     }
 
