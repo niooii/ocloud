@@ -1,7 +1,7 @@
 use inquire::Confirm;
 use sqlx::postgres::PgConnectOptions;
 
-use crate::config::SERVER_CONFIG;
+use crate::config::SETTINGS;
 use crate::server;
 use super::super::subcommands::ServerCommand;
 use super::super::error::CliResult;
@@ -9,14 +9,14 @@ use super::super::error::CliResult;
 pub async fn handler(command: ServerCommand) -> CliResult<()> {
     match command {
         ServerCommand::Run { host, port } => {
-            let pg_conf = &SERVER_CONFIG.postgres;
+            let db_settings = &SETTINGS.database;
             let connect_opts = PgConnectOptions::new()
                 .options([("timezone", "UTC")])
-                .host(&pg_conf.host)
-                .port(pg_conf.port)
-                .username(&pg_conf.user)
-                .password(&pg_conf.pass)
-                .database(&pg_conf.database);
+                .host(&db_settings.host)
+                .port(db_settings.port)
+                .username(&db_settings.username)
+                .password(&db_settings.password)
+                .database(&db_settings.database_name);
             
             server::run(&host, port, connect_opts).await?;
         },
@@ -29,7 +29,7 @@ pub async fn handler(command: ServerCommand) -> CliResult<()> {
             
             if proceed {
                 let files = server::file_controller().await?;
-                files.wipe().await?;
+                files.nuke().await?;
                 println!("Finish.");
             } else {
                 println!("Exit.");

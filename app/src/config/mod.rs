@@ -3,12 +3,10 @@ use std::{path::PathBuf, process::exit};
 use cli::CliConfig;
 use inquire::Confirm;
 use lazy_static::lazy_static;
-use server::ServerConfig;
 pub use settings::Settings;
 
 mod util;
 mod cli;
-mod server;
 pub mod settings;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -20,15 +18,10 @@ pub enum Error {
     SerializeError
 }
 
-impl From<toml::de::Error> for Error {
-    fn from(_value: toml::de::Error) -> Self {
-        Error::DeserializeError
-    }
-}
 
-impl From<toml::ser::Error> for Error {
-    fn from(_value: toml::ser::Error) -> Self {
-        Error::SerializeError
+impl From<serde_yaml::Error> for Error {
+    fn from(_value: serde_yaml::Error) -> Self {
+        Error::DeserializeError
     }
 }
 
@@ -38,20 +31,46 @@ impl From<std::io::Error> for Error {
     }
 }
 
-pub trait Config: Sized + Clone {
-    fn read_or_create_default() -> Result<Self>;
-    fn save(&self) -> Result<()>;
+pub trait YamlConfig: Sized + Clone + for<'de> serde::Deserialize<'de> + serde::Serialize {
+    const CONFIG_NAME: &'static str;
+    const DEFAULT_YAML: &'static str;
+    
+    fn read_or_create_default() -> Result<Self> {
+        let path = format!("{}.yaml", Self::CONFIG_NAME);
+        
+        let res = util::read_yaml::<Self>(&path);
+        if let Err(e) = res {
+            match e {
+                Error::FileReadError { .. } => {
+                    // File doesn't exist, create default from embedded YAML
+                    let default: Self = serde_yaml::from_str(Self::DEFAULT_YAML)
+                        .map_err(|_| Error::DeserializeError)?;
+                    default.save()?;
+                    return Ok(default);
+                },
+                _ => return Err(e)
+            }
+        } 
+        
+        res
+    }
+    
+    fn save(&self) -> Result<()> {
+        let path = format!("{}.yaml", Self::CONFIG_NAME);
+        util::save_yaml(self, path)
+    }
 }
 
-fn parse_or_prompt<T>(config_name: &str) -> T
-where T: Config + Default {
+
+fn parse_or_prompt_yaml<T>() -> T
+where T: YamlConfig {
     match T::read_or_create_default() {
         Ok(c) => c,
         Err(e) => {
             match e {
                 Error::DeserializeError => {
                     let proceed = Confirm::new(
-                        &format!("Error parsing {config_name} config. Restore default and load?")
+                        &format!("Error parsing {} config. Restore default and load?", T::CONFIG_NAME)
                         )
                         .with_default(false)
                         .with_help_message(
@@ -61,7 +80,8 @@ where T: Config + Default {
                         .unwrap_or(false);
 
                     if proceed {
-                        let def = T::default();
+                        let def: T = serde_yaml::from_str(T::DEFAULT_YAML)
+                            .expect("Invalid default YAML");
                         def.save().expect("Error saving default");
                         def
                     } else {
@@ -79,10 +99,10 @@ pub const PROGRAM_NAME: &str = "ocloud";
 
 lazy_static! {
     pub static ref CLI_CONFIG: CliConfig = {
-        parse_or_prompt("CLI")
+        parse_or_prompt_yaml()
     };
-    pub static ref SERVER_CONFIG: ServerConfig = {
-        parse_or_prompt("server")
+    pub static ref SETTINGS: Settings = {
+        Settings::try_from_configuration().expect("Failed to load configuration")
     };
     pub static ref CONFIG_DIR: PathBuf = {
         let dir = dirs::config_dir().unwrap_or_default().join(PROGRAM_NAME);
@@ -98,5 +118,5 @@ lazy_static! {
 
 pub fn init() {
     lazy_static::initialize(&CLI_CONFIG);
-    lazy_static::initialize(&SERVER_CONFIG);
+    lazy_static::initialize(&SETTINGS);
 }

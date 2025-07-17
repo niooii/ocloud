@@ -3,6 +3,7 @@ use sqlx::{Connection, Executor, PgConnection, PgPool, postgres::PgConnectOption
 use uuid::Uuid;
 use axum::serve::serve;
 use tokio::net::TcpListener;
+use ocloud::config::SETTINGS;
 
 static TRACING: Lazy<()> = Lazy::new(|| {
     let default_filter_level = "info".to_string();
@@ -33,6 +34,9 @@ pub struct TestApp {
 
 impl TestApp {
     pub async fn spawn() -> TestApp {
+        // Set environment to testing before loading configuration
+        std::env::set_var("APP_ENVIRONMENT", "testing");
+        
         Lazy::force(&TRACING);
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -45,11 +49,11 @@ impl TestApp {
         let db_pool = configure_test_database(&db_name).await;
 
         let pg_opts = sqlx::postgres::PgConnectOptions::new()
-            .host("localhost")
-            .username("user")
-            .password("pass")
+            .host(&SETTINGS.database.host)
+            .username(&SETTINGS.database.username)
+            .password(&SETTINGS.database.password)
             .database(&db_name)
-            .port(9432);
+            .port(SETTINGS.database.port);
 
         let server = run_test_server_with_listener(listener, pg_opts.clone());
 
@@ -77,7 +81,8 @@ impl Drop for TestApp {
 }
 
 async fn configure_test_database(db_name: &str) -> PgPool {
-    let mut connection = PgConnection::connect("postgres://user:pass@localhost:9432/postgres")
+    let connection_string_without_db = SETTINGS.database.connection_string_without_db();
+    let mut connection = PgConnection::connect(&connection_string_without_db)
         .await
         .expect("Failed to connect to Postgres");
 
@@ -86,12 +91,18 @@ async fn configure_test_database(db_name: &str) -> PgPool {
         .await
         .expect("Failed to create database");
 
-    let connection_pool = PgPool::connect(&format!(
-        "postgres://user:pass@localhost:9432/{}",
+    let test_connection_string = format!(
+        "postgres://{}:{}@{}:{}/{}",
+        SETTINGS.database.username,
+        SETTINGS.database.password,
+        SETTINGS.database.host,
+        SETTINGS.database.port,
         db_name
-    ))
-    .await
-    .expect("Failed to connect to Postgres");
+    );
+
+    let connection_pool = PgPool::connect(&test_connection_string)
+        .await
+        .expect("Failed to connect to Postgres");
 
     sqlx::migrate!("./migrations")
         .run(&connection_pool)
@@ -102,7 +113,8 @@ async fn configure_test_database(db_name: &str) -> PgPool {
 }
 
 async fn cleanup_database(db_name: String) {
-    let mut connection = PgConnection::connect("postgres://user:pass@localhost:9432/postgres")
+    let connection_string_without_db = SETTINGS.database.connection_string_without_db();
+    let mut connection = PgConnection::connect(&connection_string_without_db)
         .await
         .expect("Failed to connect to Postgres");
 

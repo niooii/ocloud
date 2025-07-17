@@ -10,7 +10,7 @@ use tokio::{fs, sync::{Notify, RwLock}};
 use key_mutex::tokio::KeyMutex;
 use tracing::{trace, warn};
 
-use crate::{config::SERVER_CONFIG, server::{controllers::model::{SFileEntryRow, SFileRow}, error::{ServerError, ServerResult}}};
+use crate::{config::SETTINGS, server::{controllers::model::{SFileEntryRow, SFileRow}, error::{ServerError, ServerResult}}};
 
 use super::model::{FileUploadInfo, Media, SFile, VirtualPath};
 
@@ -182,27 +182,22 @@ impl FileControllerInner {
         Ok(current_sfile_id)
     }
 
-    /// Wipes all the files stored. Very destructive.
-    pub async fn wipe(&self) -> ServerResult<()> {
+    /// Pretty much nukes everything. Very destructive (wow really?).
+    pub async fn nuke(&self) -> ServerResult<()> {
         let mut tx = self.db_pool.begin().await?;
         
-        query!(
-            r#"DELETE FROM media"#
-        ).execute(&mut *tx)
-        .await?;
-        query!(
-            r#"DELETE FROM sfiles WHERE id != 0"#
-        ).execute(&mut *tx)
-        .await?;
-        query!(
-            r#"DELETE FROM sfile_entries"#
-        ).execute(&mut *tx)
-        .await?;
-
+        sqlx::query!("DROP SCHEMA public CASCADE").execute(&mut *tx).await?;
+        sqlx::query!("CREATE SCHEMA public").execute(&mut *tx).await?;
+        sqlx::query!("GRANT ALL ON SCHEMA public TO postgres").execute(&mut *tx).await?;
+        sqlx::query!("GRANT ALL ON SCHEMA public TO public").execute(&mut *tx).await?;
+        
+        sqlx::migrate!("./migrations").run(&mut *tx).await
+            .expect("Failed to run migrations.");
+        
         tx.commit().await?;
     
-        fs::remove_dir_all(&SERVER_CONFIG.files_dir).await?;
-        fs::create_dir(&SERVER_CONFIG.files_dir).await?;
+        fs::remove_dir_all(&SETTINGS.directories.files_dir).await?;
+        fs::create_dir(&SETTINGS.directories.files_dir).await?;
 
         Ok(())
     }
@@ -293,6 +288,7 @@ impl FileControllerInner {
             let parent_path = path.parent().unwrap_or_else(VirtualPath::root);
             let parent_sfile_id = if parent_path.is_root() {
                 // Find root sfile_id
+                // TODO! this COULDD be just replaced with 1 tbh...
                 query!(
                     "SELECT child_sfile_id FROM sfile_entries WHERE parent_sfile_id = 0 LIMIT 1"
                 ).fetch_optional(&mut **tx).await?
@@ -336,15 +332,14 @@ impl FileControllerInner {
             if unique_violation {
                 ServerError::PathAlreadyExists
             } else {
-                println!("{e}");
                 ServerError::from(e)
             }
         })?;
-
+        
         if let Some(t) = default_transaction {
             t.commit().await?;
         }
-
+        
         let mut sfile = SFile::from(sfile_row);
         sfile.full_path = path.to_string();
         sfile.top_level_name = path.name().unwrap();

@@ -1,11 +1,11 @@
 use std::{io::Write, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
 use axum::{body::Body, extract::{DefaultBodyLimit, Multipart, Path, State}, http::{header, HeaderValue}, response::Response, routing::{get, patch}, Json, Router};
 use serde::Deserialize;
-use crate::{config::SERVER_CONFIG, server::controllers::model::SFile};
+use crate::{config::SETTINGS, server::controllers::model::SFile};
 use tokio::{fs::File, io::AsyncWriteExt};
 use sha2::{Digest, Sha256};
 use tokio::fs;
-use tracing::{error, trace};
+use tracing::{error, trace, trace_span};
 
 use crate::{server::controllers::{files::{FileController}, model::{FileUploadInfo, Media, VirtualPath}}};
 use crate::server::error::{ServerError, ServerResult};
@@ -18,7 +18,7 @@ pub fn routes(controller: FileController) -> Router {
             .delete(delete_file)
             .post(upload_or_mk_dirs)
             .layer(
-                if let Some(s) = SERVER_CONFIG.max_filesize {
+                if let Some(s) = SETTINGS.application.max_filesize {
                     DefaultBodyLimit::max(s)
                 } else {
                     DefaultBodyLimit::disable()
@@ -56,7 +56,7 @@ pub async fn upload_or_mk_dirs(
         if let Some(mut field) = multipart.next_field().await
         .map_err(|e| ServerError::AxumError { message: format!("Multipart error: {}", e.body_text()) })? {
             
-            let save_dir = &SERVER_CONFIG.files_dir;
+            let save_dir = &SETTINGS.directories.files_dir;
             
             // Name should be the name of the file, including the extension.
             let name: String = field.name().expect("File has no name??").to_string();

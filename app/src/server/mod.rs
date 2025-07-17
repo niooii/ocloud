@@ -8,32 +8,32 @@ use web::*;
 use std::{env, sync::Arc};
 use axum::{middleware, response::{IntoResponse, Response}, serve::serve, Json, Router};
 use error::ServerError;
-use controllers::{files::{FileController, FileControllerInner}, model::ServerConfig};
+use controllers::{files::{FileController, FileControllerInner}};
 use serde_json::json;                   
 use sqlx::{postgres::PgConnectOptions, PgPool};
 use tokio::{net::TcpListener, sync::RwLock};
-use crate::config::SERVER_CONFIG;
+use crate::config::SETTINGS;
 
 use error::ServerResult;
 
 pub async fn init() -> ServerResult<()> {
     // Create all required dirs
-    trace!("Creating data directory: {:?}", &SERVER_CONFIG.data_dir);
-    tokio::fs::create_dir_all(&SERVER_CONFIG.data_dir).await?;
-    trace!("Creating files directory: {:?}", &SERVER_CONFIG.files_dir);
-    tokio::fs::create_dir_all(&SERVER_CONFIG.files_dir).await?;
+    trace!("Creating data directory: {:?}", &SETTINGS.directories.data_dir);
+    tokio::fs::create_dir_all(&SETTINGS.directories.data_dir).await?;
+    trace!("Creating files directory: {:?}", &SETTINGS.directories.files_dir);
+    tokio::fs::create_dir_all(&SETTINGS.directories.files_dir).await?;
     trace!("Directories created successfully");
 
     // Try creating the ocloud database
-    let pool_url = SERVER_CONFIG.postgres.to_url_default_db();
-    trace!("Trying to connect to database at {pool_url}...");
+    let pool_url = SETTINGS.database.connection_string_without_db();
+    trace!("Trying to connect to database via url {pool_url}...");
     let pool = 
     PgPool::connect(&pool_url).await?;
 
     let res = sqlx::query(
         &format!(
             "CREATE DATABASE {}", 
-            SERVER_CONFIG.postgres.database
+            SETTINGS.database.database_name
         )
     ).execute(&pool).await;
 
@@ -101,7 +101,7 @@ async fn main_response_mapper(res: Response) -> Response {
 
 pub async fn file_controller() -> ServerResult<FileController> {
     init().await?;
-    let db_url = SERVER_CONFIG.postgres.to_url();
+    let db_url = SETTINGS.database.connection_string();
 
     let db_pool = PgPool::connect(&db_url).await?;
 

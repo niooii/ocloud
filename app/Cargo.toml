@@ -37,7 +37,6 @@ rustyline = "15.0.0"
 lazy_static = "1.5.0"
 url = "2.5.4"
 inquire = "0.7.5"
-toml = "0.8.19"
 axum = { version = "0.7.7", features = [ "multipart", "macros" ]}
 bytes = "1.7.2"
 futures = "0.3.30"

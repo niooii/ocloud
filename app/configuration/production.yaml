@@ -1,5 +1,5 @@
 application:
-  environment: "production"
+  environment: "Production"
   host: "0.0.0.0"
 
 database:

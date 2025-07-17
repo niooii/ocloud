@@ -1,7 +1,7 @@
-use config::{Config, ConfigError, Environment as ConfigEnvironment, File};
-use secrecy::{ExposeSecret, SecretString};
-use serde::Deserialize;
+use config::{Config, ConfigError, Environment as ConfigEnvironment};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use super::YamlConfig;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Settings {
@@ -10,33 +10,88 @@ pub struct Settings {
     pub directories: DirectorySettings,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct BaseConfig {
+    pub application: ApplicationSettings,
+    pub database: DatabaseSettings,
+    pub directories: DirectorySettings,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct DevelopmentConfig {
+    pub application: DevelopmentApplicationSettings,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct ProductionConfig {
+    pub application: ProductionApplicationSettings,
+    pub database: ProductionDatabaseSettings,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct TestingConfig {
+    pub application: TestingApplicationSettings,
+    pub database: TestingDatabaseSettings,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct DevelopmentApplicationSettings {
+    pub environment: Environment,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct ProductionApplicationSettings {
+    pub environment: Environment,
+    pub host: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct ProductionDatabaseSettings {
+    pub require_ssl: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct TestingApplicationSettings {
+    pub environment: Environment,
+    pub port: u16,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct TestingDatabaseSettings {
+    pub database_name: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ApplicationSettings {
     pub host: String,
     pub port: u16,
     pub environment: Environment,
+    pub max_filesize: Option<usize>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct DatabaseSettings {
     pub username: String,
-    pub password: SecretString,
+    pub password: String,
     pub port: u16,
     pub host: String,
     pub database_name: String,
     pub require_ssl: bool,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct DirectorySettings {
     pub data_dir: PathBuf,
     pub files_dir: PathBuf,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum Environment {
+    #[serde(alias="development", alias="dev")]
     Development,
+    #[serde(alias="production", alias="prod")]
     Production,
+    #[serde(alias="testing", alias="test")]
     Testing,
 }
 
@@ -67,42 +122,58 @@ impl TryFrom<String> for Environment {
 }
 
 impl DatabaseSettings {
-    pub fn connection_string(&self) -> SecretString {
-        SecretString::new(format!(
+    pub fn connection_string(&self) -> String {
+        format!(
             "postgres://{}:{}@{}:{}/{}",
             self.username,
-            self.password.expose_secret(),
+            self.password,
             self.host,
             self.port,
             self.database_name
-        ).into())
+        )
     }
 
-    pub fn connection_string_without_db(&self) -> SecretString {
-        SecretString::new(format!(
-            "postgres://{}:{}@{}:{}",
+    pub fn connection_string_without_db(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}/postgres",
             self.username,
-            self.password.expose_secret(),
+            self.password,
             self.host,
             self.port
-        ).into())
+        )
     }
 }
 
 impl Settings {
     pub fn try_from_configuration() -> Result<Settings, ConfigError> {
-        let base_path = std::env::current_dir().expect("Failed to determine the current directory");
-        let configuration_directory = base_path.join("configuration");
-
+        use super::parse_or_prompt_yaml;
+        
         let environment: Environment = std::env::var("APP_ENVIRONMENT")
             .unwrap_or_else(|_| "development".into())
             .try_into()
             .map_err(|e| ConfigError::Message(e))?;
 
-        let environment_filename = format!("{}.yaml", environment.as_str());
+        let base_config: BaseConfig = parse_or_prompt_yaml();
+        let environment_config = match environment {
+            Environment::Development => {
+                let dev_config: DevelopmentConfig = parse_or_prompt_yaml();
+                serde_yaml::to_string(&dev_config).map_err(|_| ConfigError::Message("Failed to serialize development config".to_string()))?
+            },
+            Environment::Production => {
+                let prod_config: ProductionConfig = parse_or_prompt_yaml();
+                serde_yaml::to_string(&prod_config).map_err(|_| ConfigError::Message("Failed to serialize production config".to_string()))?
+            },
+            Environment::Testing => {
+                let test_config: TestingConfig = parse_or_prompt_yaml();
+                serde_yaml::to_string(&test_config).map_err(|_| ConfigError::Message("Failed to serialize testing config".to_string()))?
+            },
+        };
+
+        let base_yaml = serde_yaml::to_string(&base_config).map_err(|_| ConfigError::Message("Failed to serialize base config".to_string()))?;
+
         let settings = Config::builder()
-            .add_source(File::from(configuration_directory.join("base.yaml")))
-            .add_source(File::from(configuration_directory.join(environment_filename)))
+            .add_source(config::File::from_str(&base_yaml, config::FileFormat::Yaml))
+            .add_source(config::File::from_str(&environment_config, config::FileFormat::Yaml))
             .add_source(
                 ConfigEnvironment::with_prefix("APP")
                     .prefix_separator("_")
@@ -112,4 +183,24 @@ impl Settings {
 
         settings.try_deserialize::<Settings>()
     }
+}
+
+impl YamlConfig for BaseConfig {
+    const CONFIG_NAME: &'static str = "base";
+    const DEFAULT_YAML: &'static str = include_str!("../../configuration/base.yaml");
+}
+
+impl YamlConfig for DevelopmentConfig {
+    const CONFIG_NAME: &'static str = "development";
+    const DEFAULT_YAML: &'static str = include_str!("../../configuration/development.yaml");
+}
+
+impl YamlConfig for ProductionConfig {
+    const CONFIG_NAME: &'static str = "production";
+    const DEFAULT_YAML: &'static str = include_str!("../../configuration/production.yaml");
+}
+
+impl YamlConfig for TestingConfig {
+    const CONFIG_NAME: &'static str = "testing";
+    const DEFAULT_YAML: &'static str = include_str!("../../configuration/testing.yaml");
 }

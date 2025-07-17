@@ -2409,7 +2409,6 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tokio-util",
- "toml",
  "tower",
  "tower-http",
  "tower_governor",

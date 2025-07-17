@@ -3,19 +3,20 @@ use serde::{de::DeserializeOwned, Serialize};
 use std::fs;
 use super::{Error, Result, CONFIG_DIR};
 
-pub fn read_toml<T>(rel_path: impl AsRef<Path> + ToString) -> Result<T>
+pub fn read_yaml<T>(rel_path: impl AsRef<Path> + ToString) -> Result<T>
 where T: DeserializeOwned {
     let path = CONFIG_DIR.join(&rel_path);
-    toml::from_str(
+    serde_yaml::from_str(
         &fs::read_to_string(path)?
-    ).map_err(Error::from)
+    ).map_err(|_| Error::DeserializeError)
 }
 
-pub fn save_toml<T>(config: T, rel_path: impl AsRef<Path>) -> Result<()>
+pub fn save_yaml<T>(config: T, rel_path: impl AsRef<Path>) -> Result<()>
 where T: Serialize {
     let path = CONFIG_DIR.join(rel_path);
     
-    let content = toml::to_string_pretty(&config)?;
+    let content = serde_yaml::to_string(&config).map_err(|_| Error::SerializeError)?;
     fs::write(path, content)
         .map_err(Error::from)
 }
+

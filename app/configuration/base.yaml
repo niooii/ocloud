@@ -1,12 +1,13 @@
 application:
   host: "127.0.0.1"
   port: 8000
-  environment: "development"
+  environment: "Development"
+  max_filesize: null
 
 database:
-  username: "postgres"
-  password: "password"
-  port: 5432
+  username: "user"
+  password: "pass"
+  port: 9432
   host: "localhost"
   database_name: "ocloud"
   require_ssl: false

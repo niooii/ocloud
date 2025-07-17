@@ -4,7 +4,7 @@ use clap::Parser;
 use error::CliResult;
 use subcommands::SubCommand;
 use tracing::error;
-use crate::config::{self, Config, CLI_CONFIG, CONFIG_DIR};
+use crate::config::{self, CLI_CONFIG, CONFIG_DIR, YamlConfig};
 use crate::config::DATA_DIR;
 mod api;
 mod commands;

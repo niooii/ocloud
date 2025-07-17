@@ -11,7 +11,7 @@ use sqlx::{prelude::FromRow, PgPool};
 use tokio::{fs::File, io::{AsyncRead, AsyncReadExt}};
 use bytes::Bytes;
 use tokio_util::io::ReaderStream;
-use crate::{config::SERVER_CONFIG, server::error::{ServerError, ServerResult}};
+use crate::{config::SETTINGS, server::error::{ServerError, ServerResult}};
 
 use super::{files::FileController};
 
@@ -37,7 +37,7 @@ impl Media {
     /// Storage path follows this format: 
     /// `save_dir/[first 2 chars of hash]/[next 2]/[rest of hash]`
     pub async fn true_path(&self) -> PathBuf {
-        let save_dir = &SERVER_CONFIG.files_dir;
+        let save_dir = &SETTINGS.directories.files_dir;
 
         let hash = self.file_hash.clone();
         let first_dir = &hash[0..2];
@@ -62,7 +62,7 @@ impl Media {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct SFile {
     pub id: u64,
     pub media_id: Option<u64>,
@@ -393,10 +393,3 @@ pub struct FileUploadInfo {
     pub vpath: VirtualPath
 }           
 
-// Global configuration settings
-#[derive(Deserialize, Debug)]
-pub struct ServerConfig {
-    // TODO! should make an absolute dir maybe
-    pub save_dir: PathBuf,
-    pub max_filesize: Option<usize>
-}
