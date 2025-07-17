@@ -4,10 +4,12 @@ use cli::CliConfig;
 use inquire::Confirm;
 use lazy_static::lazy_static;
 use server::ServerConfig;
+pub use settings::Settings;
 
 mod util;
 mod cli;
 mod server;
+pub mod settings;
 
 pub type Result<T> = std::result::Result<T, Error>;
 

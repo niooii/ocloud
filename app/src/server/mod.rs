@@ -1,6 +1,8 @@
-mod web;
-mod controllers;
+pub mod web;
+pub mod controllers;
 pub mod error;
+pub mod validation;
+pub mod db_utils;
 use tracing::{trace, warn};
 use web::*;
 use std::{env, sync::Arc};
@@ -16,8 +18,11 @@ use error::ServerResult;
 
 pub async fn init() -> ServerResult<()> {
     // Create all required dirs
+    trace!("Creating data directory: {:?}", &SERVER_CONFIG.data_dir);
     tokio::fs::create_dir_all(&SERVER_CONFIG.data_dir).await?;
+    trace!("Creating files directory: {:?}", &SERVER_CONFIG.files_dir);
     tokio::fs::create_dir_all(&SERVER_CONFIG.files_dir).await?;
+    trace!("Directories created successfully");
 
     // Try creating the ocloud database
     let pool_url = SERVER_CONFIG.postgres.to_url_default_db();
@@ -44,26 +49,38 @@ pub async fn init() -> ServerResult<()> {
     }
 }
 
+pub async fn create_server(db_pool: PgPool) -> Router {
+    trace!("Creating file controller...");
+    let mc = Arc::new(FileControllerInner::new(db_pool).await);
+    trace!("File controller created.");
+
+    trace!("Setting up routes...");
+    let routes = Router::new()
+        .nest("", routes::routes(mc).await)
+        .layer(middleware::map_response(main_response_mapper))
+        .layer(middleware::from_fn(web::middleware::trace_request));
+    trace!("Routes set up.");
+
+    routes
+}
+
 pub async fn run(host: &str, port: u16, pg_connect_opts: PgConnectOptions) -> ServerResult<()> {
     init().await?;
     trace!("Created required directories and databases.");
 
-    let db_pool = PgPool::connect_with(pg_connect_opts)
-    .await?;
+    let db_pool = PgPool::connect_lazy_with(pg_connect_opts);
 
     sqlx::migrate!("./migrations").run(&db_pool).await
-    .expect("Failed to run migrations.");
+        .expect("Failed to run migrations.");
     trace!("Ran database migrations.");
 
-    let mc = Arc::new(FileControllerInner::new(db_pool).await);
+    let routes = create_server(db_pool).await;
 
-    let routes = Router::new()
-    .nest("", routes::routes(mc).await)
-    .layer(middleware::map_response(main_response_mapper));
-
+    trace!("Binding to {host}:{port}...");
     let listener = TcpListener::bind(
         format!("{host}:{port}")
     ).await?;
+    trace!("Listener bound successfully.");
 
     println!("Listening on {host}:{port}");
     serve(listener, routes.into_make_service()).await?;
@@ -73,21 +90,11 @@ pub async fn run(host: &str, port: u16, pg_connect_opts: PgConnectOptions) -> Se
 async fn main_response_mapper(res: Response) -> Response {
     let error = res.extensions().get::<ServerError>();
 
-    let sc_and_ce = error
-        .map(error::ServerError::to_status_and_client_error);
-
-    let error_response = sc_and_ce
-        .as_ref()
-        .map(
-            |(status_code, client_err)| {
-            let err_json = serde_json::to_value(client_err);
-            let body = err_json.unwrap_or(json!("Failed to get error information."));
-
-            warn!("Error: {client_err:?}");
-
-            (*status_code, Json(body)).into_response()
-            }
-        );
+    let error_response = error.map(|err| {
+        let (status_code, client_err) = err.to_status_and_client_error();
+        warn!("Request error: {}", err);
+        (status_code, Json(client_err)).into_response()
+    });
 
     error_response.unwrap_or(res)
 }

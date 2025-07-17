@@ -4,9 +4,9 @@ use std::{future::Future, path::{Path, PathBuf}, pin::Pin};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::de::Error as err;
 use axum::extract::multipart::Field;
-use futures::{Stream, StreamExt};
+use futures::Stream;
 use serde::{Deserialize, Serialize};
-use sha2::{ Digest, Sha256};
+use sha2::Sha256;
 use sqlx::{prelude::FromRow, PgPool};
 use tokio::{fs::File, io::{AsyncRead, AsyncReadExt}};
 use bytes::Bytes;
@@ -50,7 +50,7 @@ impl Media {
     // Get a ReaderStream from the file, or an Err if it doesn't exist.
     pub async fn reader_stream(&self) -> ServerResult<ReaderStream<File>> {
         let file = File::open(&self.true_path().await)
-            .await.map_err(|e| ServerError::IOError { why: e.to_string() })?;
+            .await.map_err(|e| ServerError::IOError { message: e.to_string() })?;
 
         Ok(ReaderStream::new(file))
     }
@@ -58,7 +58,7 @@ impl Media {
     // Attempts to delete the underlying file from the disk.
     pub async fn delete_from_disk(&self) -> ServerResult<()> {
         tokio::fs::remove_file(self.true_path().await.as_path()).await
-            .map_err(|e| ServerError::IOError { why: e.to_string() })
+            .map_err(|e| ServerError::IOError { message: e.to_string() })
     }
 }
 
@@ -205,7 +205,7 @@ impl VirtualPath {
 
     pub fn err_if_dir(&self) -> ServerResult<()> {
         if self.is_dir() {
-            Err(ServerError::Error { why: "Bad path: did not expect directory".to_string() })
+            Err(ServerError::InternalError { message: "Bad path: did not expect directory".to_string() })
         } else {
             Ok(())
         }
@@ -213,7 +213,7 @@ impl VirtualPath {
 
     pub fn err_if_file(&self) -> ServerResult<()> {
         if !self.is_dir() {
-            Err(ServerError::Error { why: "Bad path: did not expect file".to_string() })
+            Err(ServerError::InternalError { message: "Bad path: did not expect file".to_string() })
         } else {
             Ok(())
         }
@@ -335,7 +335,7 @@ impl<'de> Deserialize<'de> for VirtualPath {
         D: serde::Deserializer<'de> {
         let val = String::deserialize(deserializer)?;
         if !val.starts_with("root/") {
-            return Err(ServerError::Error { why: "Path should start with 'root/'.".into() })
+            return Err(ServerError::InternalError { message: "Path should start with 'root/'.".into() })
                 .map_err(D::Error::custom);
         }
         Ok(

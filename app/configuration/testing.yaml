@@ -1,0 +1,6 @@
+application:
+  environment: "testing"
+  port: 0
+
+database:
+  database_name: "ocloud_test"

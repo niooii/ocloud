@@ -83,7 +83,7 @@ impl FileControllerInner {
         if is_duplicate {
             // dont matter if this fails or not ngl
             let _ = fs::remove_file(&info.temp_path).await
-                .map_err(|e| ServerError::IOError { why: e.to_string() });
+                .map_err(|e| ServerError::IOError { message: e.to_string() });
             trace!("Removed duplicate file {}", info.temp_path.to_string_lossy());
         } else {
             // No duplicate
@@ -95,7 +95,7 @@ impl FileControllerInner {
             fs::rename(
                 &info.temp_path, 
                 &true_path
-            ).await.map_err(|e| ServerError::IOError { why: e.to_string() })?;
+            ).await.map_err(|e| ServerError::IOError { message: e.to_string() })?;
             
             trace!("Finalized upload: {}", true_path.to_string_lossy());  
         }
@@ -222,7 +222,7 @@ impl FileControllerInner {
         vpath.err_if_dir()?;
 
         if vpath.is_root() {
-            return Err(ServerError::BadOperation { why: "Cannot delete root directory.".into() })
+            return Err(ServerError::BadOperation { details: "Cannot delete root directory.".into() })
         }
 
         let mut tx = self.db_pool.begin().await?;
@@ -288,7 +288,7 @@ impl FileControllerInner {
             .unwrap_or(default_transaction.get_or_insert(self.db_pool.begin().await?));
 
         let (parent_sfile_id, filename) = if path.is_root() {
-            return Err(ServerError::BadOperation { why: "Cannot create another root directory.".into() });
+            return Err(ServerError::BadOperation { details: "Cannot create another root directory.".into() });
         } else {
             let parent_path = path.parent().unwrap_or_else(VirtualPath::root);
             let parent_sfile_id = if parent_path.is_root() {
@@ -489,12 +489,12 @@ impl FileControllerInner {
         let to_dir_id = self.resolve_path_to_sfile_id(&to.parent().unwrap_or(VirtualPath::root())).await?;
         
         if from.is_root() {
-            return Err(ServerError::BadOperation { why: "Cannot move the root directory".into() })
+            return Err(ServerError::BadOperation { details: "Cannot move the root directory".into() })
         }
 
         if to.child_of(from) {
             return Err(ServerError::BadOperation { 
-                why: "Cannot move directory into itself or its descendants".into() 
+                details: "Cannot move directory into itself or its descendants".into() 
             });
         }
 

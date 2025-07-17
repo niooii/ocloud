@@ -63,9 +63,10 @@ pub struct ServerConfig {
 
 impl Default for ServerConfig {
     fn default() -> Self {
+        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         Self {
-            data_dir: DATA_DIR.clone().join("data"),
-            files_dir: DATA_DIR.clone().join("files"),
+            data_dir: current_dir.join("data"),
+            files_dir: current_dir.join("data").join("files"),
             postgres: Default::default(),
             max_filesize: None
         }

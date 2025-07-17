@@ -37,7 +37,7 @@ pub enum ServerCommand {
         #[arg(short = 'H', long = "host", default_value="0.0.0.0")]
         host: String,
         /// The port to use when starting the server.
-        #[arg(short = 'p', long = "port", default_value="443")]
+        #[arg(short = 'p', long = "port", default_value="8000")]
         port: u16,
     },
     /// Clears all data in the server, including uploaded files, etc.

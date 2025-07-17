@@ -12,6 +12,14 @@ include = [
     "migrations/**/*",
 ]
 
+[lib]
+name = "ocloud"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ocloud"
+path = "src/main.rs"
+
 [dependencies]
 anyhow = "1.0.91"
 arboard = "3.4.1"
@@ -43,5 +51,19 @@ strum_macros = "0.26.4"
 tower-http = { version = "0.6.2", features = ["cors"] }
 chrono = { version = "0.4.39", features = ["serde"] }
 pretty_env_logger = "0.5.0"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
 tracing = "0.1.41"
+tracing-actix-web = "0.7.14"
+config = "0.14.1"
+secrecy = { version = "0.10.0", features = ["serde"] }
+serde_yaml = "0.9.34"
+thiserror = "1.0.69"
+tower = { version = "0.5.1", features = ["limit", "buffer", "timeout"] }
+tower_governor = "0.4.2"
+uuid = { version = "1.11.0", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tokio-test = "0.4.4"
+wiremock = "0.6.0"
+once_cell = "1.20.2"
+uuid = { version = "1.11.0", features = ["v4"] }

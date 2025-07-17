@@ -1,8 +1,8 @@
-use std::{io::Write, path::PathBuf, sync::{Arc, Mutex}, time::{SystemTime, UNIX_EPOCH}};
-use axum::{body::Body, extract::{DefaultBodyLimit, Multipart, Path, Query, State}, http::{header, HeaderValue}, response::Response, routing::{get, patch}, Json, Router};
+use std::{io::Write, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
+use axum::{body::Body, extract::{DefaultBodyLimit, Multipart, Path, State}, http::{header, HeaderValue}, response::Response, routing::{get, patch}, Json, Router};
 use serde::Deserialize;
 use crate::{config::SERVER_CONFIG, server::controllers::model::SFile};
-use tokio::{fs::File, io::AsyncWriteExt, sync::Notify};
+use tokio::{fs::File, io::AsyncWriteExt};
 use sha2::{Digest, Sha256};
 use tokio::fs;
 use tracing::{error, trace};
@@ -54,7 +54,7 @@ pub async fn upload_or_mk_dirs(
     // If it was multipart
     if let Some(mut multipart) = multipart {
         if let Some(mut field) = multipart.next_field().await
-        .map_err(|e| ServerError::AxumError { why: format!("Multipart error: {}", e.body_text()) })? {
+        .map_err(|e| ServerError::AxumError { message: format!("Multipart error: {}", e.body_text()) })? {
             
             let save_dir = &SERVER_CONFIG.files_dir;
             
@@ -79,14 +79,14 @@ pub async fn upload_or_mk_dirs(
             );
 
             let mut file: File = File::create(&temp_path).await
-                .map_err(|e| ServerError::IOError { why: e.to_string() } )?;
+                .map_err(|e| ServerError::IOError { message: e.to_string() } )?;
             // i64 type because postgres doesnt support unsigned gg
 
             let mut file_size: i64 = 0;
             while let Some(chunk) = field.chunk().await
-                .map_err(|e| ServerError::AxumError { why: format!("Chunk error: {}", e.body_text()) })? {
+                .map_err(|e| ServerError::AxumError { message: format!("Chunk error: {}", e.body_text()) })? {
                 
-                file.write_all(&chunk).await.map_err(|e| ServerError::IOError { why: e.to_string() } )?;
+                file.write_all(&chunk).await.map_err(|e| ServerError::IOError { message: e.to_string() } )?;
                 file_size += chunk.len() as i64;
                 hasher.write_all(&chunk).expect("Failed to hash shit");
             }
@@ -161,7 +161,7 @@ pub async fn get_file_or_list_dir(
             header::CONTENT_DISPOSITION,
             HeaderValue::from_str(
                 &format!("inline; filename=\"{}\"", file_name)
-            ).map_err(|_e| ServerError::Error { why: "Parse error".to_string() })?
+            ).map_err(|_e| ServerError::InternalError { message: "Parse error".to_string() })?
         );
 
         res.headers_mut().append(
