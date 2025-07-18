@@ -1,19 +1,14 @@
 // model.rs
 
-use std::{future::Future, path::{Path, PathBuf}, pin::Pin};
+use std::{fmt, path::{Path, PathBuf}};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::de::Error as err;
-use axum::extract::multipart::Field;
-use futures::Stream;
 use serde::{Deserialize, Serialize};
-use sha2::Sha256;
-use sqlx::{prelude::FromRow, PgPool};
-use tokio::{fs::File, io::{AsyncRead, AsyncReadExt}};
-use bytes::Bytes;
+use sqlx::prelude::FromRow;
+use tokio::fs::File;
 use tokio_util::io::ReaderStream;
-use crate::{config::SETTINGS, server::error::{ServerError, ServerResult}};
-
-use super::{files::FileController};
+use uuid::Uuid;
+use crate::{config::SETTINGS, server::{controllers::websocket::WsIncomingEvent, error::{ServerError, ServerResult}, ServerState}};
 
 // A row from the database.
 #[derive(FromRow, Debug)]
@@ -62,12 +57,13 @@ impl Media {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct SFile {
     pub id: u64,
     pub media_id: Option<u64>,
     pub is_dir: bool,
-    pub full_path: String,  // Computed when needed, not stored in DB
+    // computed when needed, not stored in DB
+    pub full_path: String,  
     pub created_at: DateTime<Utc>,
     pub modified_at: DateTime<Utc>,
     // Either the name of the directory or the file
@@ -146,7 +142,26 @@ fn check_is_dir(path: &PathBuf) -> bool {
     path.to_string_lossy().ends_with('/')
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VirtualPathError {
+    InvalidPrefix,
+    EmptyPath,
+    InvalidCharacters,
+}
+
+impl fmt::Display for VirtualPathError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VirtualPathError::InvalidPrefix => write!(f, "Path must start with 'root/'"),
+            VirtualPathError::EmptyPath => write!(f, "Path cannot be empty"),
+            VirtualPathError::InvalidCharacters => write!(f, "Path contains invalid characters"),
+        }
+    }
+}
+
+impl std::error::Error for VirtualPathError {}
+
+#[derive(Debug, PartialEq, Eq)]
 /// A path that references a file on the host machines filesystem, used to access uploaded content.
 /// The path can never be empty.
 pub struct VirtualPath {
@@ -160,6 +175,26 @@ impl VirtualPath {
             path: PathBuf::from("root/"),
             is_dir: true
         }
+    }
+
+    /// Fallible constructor that validates the path
+    pub fn try_from_string<S: AsRef<str>>(path: S) -> Result<Self, VirtualPathError> {
+        let path_str = path.as_ref();
+        
+        if path_str.is_empty() {
+            return Err(VirtualPathError::EmptyPath);
+        }
+        
+        if !path_str.starts_with("root/") {
+            return Err(VirtualPathError::InvalidPrefix);
+        }
+        
+        // Check for invalid characters (null bytes, etc.)
+        if path_str.contains('\0') {
+            return Err(VirtualPathError::InvalidCharacters);
+        }
+        
+        Ok(VirtualPath::from(path_str))
     }
 
     /// A path is never a child of itself.
@@ -326,7 +361,60 @@ impl VirtualPath {
 
     pub fn is_root(&self) -> bool {
         self.path.to_string_lossy() == "root/"
-    } 
+    }
+
+    /// Join with another path component, ensuring proper directory semantics
+    pub fn join<S: AsRef<str>>(&self, component: S) -> Result<VirtualPath, ServerError> {
+        self.err_if_file()?;
+        let mut new_path = self.clone();
+        new_path.push_dir(component.as_ref().to_string())?;
+        Ok(new_path)
+    }
+
+    /// Join with a file name, ensuring this is a directory
+    pub fn join_file<S: AsRef<str>>(&self, filename: S) -> Result<VirtualPath, ServerError> {
+        self.err_if_file()?;
+        let mut new_path = self.clone();
+        new_path.push_file(filename.as_ref().to_string())?;
+        Ok(new_path)
+    }
+
+    /// Get the extension of the file (if it's a file)
+    pub fn extension(&self) -> Option<&str> {
+        if self.is_dir {
+            None
+        } else {
+            self.path.extension().and_then(|ext| ext.to_str())
+        }
+    }
+
+    /// Get the file stem (filename without extension)
+    pub fn file_stem(&self) -> Option<&str> {
+        if self.is_dir {
+            None
+        } else {
+            self.path.file_stem().and_then(|stem| stem.to_str())
+        }
+    }
+
+    /// Get depth from root (root/ = 0, root/a/ = 1, root/a/b.txt = 2)
+    pub fn depth(&self) -> usize {
+        let parts = self.path_parts_no_root();
+        if self.is_dir && !parts.is_empty() && parts.last().unwrap().is_empty() {
+            parts.len() - 1
+        } else {
+            parts.len()
+        }
+    }
+}
+
+impl Clone for VirtualPath {
+    fn clone(&self) -> Self {
+        Self {
+            path: self.path.clone(),
+            is_dir: self.is_dir,
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for VirtualPath {
@@ -371,16 +459,37 @@ impl From<&str> for VirtualPath {
     }
 }
 
-impl ToString for VirtualPath {
+impl fmt::Display for VirtualPath {
     /// Does not include the trailing '/' whether it is a directory or not
-    fn to_string(&self) -> String {
-        if self.is_dir {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let path_str = if self.is_dir {
             let mut s = self.path.as_os_str().to_string_lossy().into_owned();
             s.pop();
             s
         } else {
             self.path.as_os_str().to_string_lossy().into_owned()
-        }
+        };
+        write!(f, "{}", path_str)
+    }
+}
+
+impl VirtualPath {
+    /// Convenience method for getting string representation
+    /// Does not include the trailing '/' whether it is a directory or not
+    pub fn to_string(&self) -> String {
+        format!("{}", self)
+    }
+}
+
+impl AsRef<Path> for VirtualPath {
+    fn as_ref(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl AsRef<PathBuf> for VirtualPath {
+    fn as_ref(&self) -> &PathBuf {
+        &self.path
     }
 }
 
@@ -393,3 +502,51 @@ pub struct FileUploadInfo {
     pub vpath: VirtualPath
 }           
 
+// Websocket (outgoing) events
+#[derive(Debug, Clone, Serialize, ocloud_macros::WsOutEvent)]
+pub struct FileCreatedEvent {
+    pub path: String,
+    pub file_id: u64,
+    pub is_dir: bool,
+}
+
+#[derive(Debug, Clone, Serialize, ocloud_macros::WsOutEvent)]
+pub struct FileDeletedEvent {
+    pub path: String,
+    pub file_id: u64,
+}
+
+#[derive(Debug, Clone, Serialize, ocloud_macros::WsOutEvent)]
+pub struct FileMovedEvent {
+    pub from_path: String,
+    pub to_path: String,
+    pub file_id: u64,
+}
+
+#[derive(Debug, Clone, Serialize, ocloud_macros::WsOutEvent)]
+pub struct UploadProgressEvent {
+    pub path: String,
+    pub file_name: String,
+    pub bytes_uploaded: u64,
+    pub total_bytes: u64,
+    pub progress_percent: f32,
+}
+
+#[derive(Debug, Clone, Serialize, ocloud_macros::WsOutEvent)]
+pub struct UploadCompletedEvent {
+    pub path: String,
+    pub file_name: String,
+    pub file_id: u64,
+}
+
+// Incoming websocket events
+#[ocloud_macros::WsIncomingEvent]
+pub struct CancelUploadEvent {
+    pub temp: String
+}
+
+impl WsIncomingEvent for CancelUploadEvent {
+    async fn handle(self, state: &ServerState, connection_id: Uuid) -> ServerResult<()> {
+        todo!()
+    }
+}

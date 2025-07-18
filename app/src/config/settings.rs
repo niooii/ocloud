@@ -148,8 +148,9 @@ impl Settings {
     pub fn try_from_configuration() -> Result<Settings, ConfigError> {
         use super::parse_or_prompt_yaml;
         
+        let default_env = if cfg!(debug_assertions) { "development" } else { "production" };
         let environment: Environment = std::env::var("APP_ENVIRONMENT")
-            .unwrap_or_else(|_| "development".into())
+            .unwrap_or_else(|_| default_env.into())
             .try_into()
             .map_err(|e| ConfigError::Message(e))?;
 

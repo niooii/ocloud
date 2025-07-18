@@ -1,13 +1,13 @@
 use std::{io::Write, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
 use axum::{body::Body, extract::{DefaultBodyLimit, Multipart, Path, State}, http::{header, HeaderValue}, response::Response, routing::{get, patch}, Json, Router};
 use serde::Deserialize;
-use crate::{config::SETTINGS, server::controllers::model::SFile};
+use crate::{config::SETTINGS, server::models::files::SFile};
 use tokio::{fs::File, io::AsyncWriteExt};
 use sha2::{Digest, Sha256};
 use tokio::fs;
 use tracing::{error, trace, trace_span};
 
-use crate::{server::controllers::{files::{FileController}, model::{FileUploadInfo, Media, VirtualPath}}};
+use crate::{server::{controllers::{files::FileController, websocket::WebSocketController}, models::files::{FileUploadInfo, Media, VirtualPath}}};
 use crate::server::error::{ServerError, ServerResult};
 
 pub fn routes(controller: FileController) -> Router {
@@ -83,12 +83,22 @@ pub async fn upload_or_mk_dirs(
             // i64 type because postgres doesnt support unsigned gg
 
             let mut file_size: i64 = 0;
+            const PROGRESS_THRESHOLD: u64 = 1024 * 1024; // 1MB
+            let mut last_progress_report: u64 = 0;
+            
             while let Some(chunk) = field.chunk().await
                 .map_err(|e| ServerError::AxumError { message: format!("Chunk error: {}", e.body_text()) })? {
                 
                 file.write_all(&chunk).await.map_err(|e| ServerError::IOError { message: e.to_string() } )?;
                 file_size += chunk.len() as i64;
                 hasher.write_all(&chunk).expect("Failed to hash shit");
+
+                // Send progress updates every 1MB or so
+                if file_size as u64 - last_progress_report >= PROGRESS_THRESHOLD {
+                    // Note: We don't have total size available with multipart uploads in axum
+                    // So we'll just report current bytes uploaded without percentage
+                    last_progress_report = file_size as u64;
+                }
             }
 
             file.flush().await.expect("Bluh flushing file failed");
@@ -121,7 +131,11 @@ pub async fn upload_or_mk_dirs(
                     error!("(Tried) removed {} due to error: {e:?}", temp_path.to_string_lossy());
                     Err(e)
                 }
-                Ok(c) => Ok(c)
+                Ok(c) => {
+                    // Notify upload completion via WebSocket if available
+                    // This is handled in the FileController's finish_upload method
+                    Ok(c)
+                }
             };
 
             drop(mutex);

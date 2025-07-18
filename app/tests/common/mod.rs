@@ -26,60 +26,6 @@ static TRACING: Lazy<()> = Lazy::new(|| {
     }
 });
 
-pub struct TestApp {
-    pub address: String,
-    pub db_pool: PgPool,
-    pub db_name: String,
-}
-
-impl TestApp {
-    pub async fn spawn() -> TestApp {
-        // Set environment to testing before loading configuration
-        std::env::set_var("APP_ENVIRONMENT", "testing");
-        
-        Lazy::force(&TRACING);
-
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("Failed to bind random port");
-        let port = listener.local_addr().unwrap().port();
-        let address = format!("http://127.0.0.1:{}", port);
-
-        let db_name = format!("test_{}", Uuid::new_v4().simple());
-        let db_pool = configure_test_database(&db_name).await;
-
-        let pg_opts = sqlx::postgres::PgConnectOptions::new()
-            .host(&SETTINGS.database.host)
-            .username(&SETTINGS.database.username)
-            .password(&SETTINGS.database.password)
-            .database(&db_name)
-            .port(SETTINGS.database.port);
-
-        let server = run_test_server_with_listener(listener, pg_opts.clone());
-
-        let server_handle = tokio::spawn(async move {
-            if let Err(e) = server.await {
-                eprintln!("Server failed to start: {:?}", e);
-            }
-        });
-
-        // Give the server a moment to start up
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-        TestApp {
-            address,
-            db_pool,
-            db_name,
-        }
-    }
-}
-
-impl Drop for TestApp {
-    fn drop(&mut self) {
-        tokio::spawn(cleanup_database(self.db_name.clone()));
-    }
-}
-
 async fn configure_test_database(db_name: &str) -> PgPool {
     let connection_string_without_db = SETTINGS.database.connection_string_without_db();
     let mut connection = PgConnection::connect(&connection_string_without_db)

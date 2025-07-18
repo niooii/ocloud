@@ -3,12 +3,11 @@ use axum::routing::get;
 use axum::Router;
 use tower_http::cors::CorsLayer;
 
-use crate::server::controllers::files::FileController;
-use super::handlers::files;
-use super::handlers::auth;
+use crate::server::{controllers::{files::FileController, websocket::WebSocketController}, ServerState};
+use super::handlers::{files, auth, ws};
 use super::middleware;
 
-pub async fn routes(controller: FileController) -> Router {
+pub async fn routes(controller: FileController, ws_controller: Option<WebSocketController>, server_state: ServerState) -> Router {
     let cors = CorsLayer::new()
         .allow_origin("http://localhost:3000".parse::<HeaderValue>().unwrap())
         .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
@@ -19,11 +18,18 @@ pub async fn routes(controller: FileController) -> Router {
         ])
         .allow_credentials(true);
 
-    Router::new()
-        .nest("/", files::routes(controller))
+    let mut router = Router::new()
+        .nest("/", files::routes(controller.clone()))
         .nest("/", auth::routes())
         .route("/ping", get(ping))
-        .route("/health", get(health_check))
+        .route("/health", get(health_check));
+    
+    // Add WebSocket routes if WebSocket controller is provided
+    if let Some(ws_ctrl) = ws_controller {
+        router = router.nest("/", ws::routes(ws_ctrl, controller.clone(), server_state));
+    }
+    
+    router
         .layer(cors)
         // Rate limiting temporarily disabled
         // .layer(middleware::rate_limiting_layer())

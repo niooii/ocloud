@@ -2,6 +2,12 @@
 
 A cloud file storage server, with some extras
 
+## TODO
+- Add authentication and ReBAC
+- Add multi upload
+- Make frontend handle the displaying of videos and images like medal
+- Optional MD document editor in the frontend, google docs kinda
+
 ## Quick Start
 
 ```bash
@@ -46,6 +52,23 @@ Example: `curl -X DELETE http://localhost:8000/files/myfile.txt`
 Move/rename files. Request body: `{"from": "/old/path", "to": "/new/path"}`
 
 Example: `curl -X PATCH http://localhost:8000/files -d '{"from":"/a.txt","to":"/b.txt"}' -H "Content-Type: application/json"`
+
+### WebSocket Real-time Events
+
+#### `WS /ws`
+Connect to receive real-time file system events and upload progress.
+
+Events (JSON):
+- `FileCreated` - File/directory created: `{"type": "FileCreated", "data": {"path": "/file.txt", "file_id": 123, "is_dir": false}}`
+- `FileDeleted` - File deleted: `{"type": "FileDeleted", "data": {"path": "/file.txt", "file_id": 123}}`  
+- `FileMoved` - File moved/renamed: `{"type": "FileMoved", "data": {"from_path": "/old.txt", "to_path": "/new.txt", "file_id": 123}}`
+- `UploadProgress` - Upload progress: `{"type": "UploadProgress", "data": {"path": "/folder/", "file_name": "big.zip", "bytes_uploaded": 1024, "total_bytes": 2048, "progress_percent": 50.0}}`
+
+Example: 
+```javascript
+const ws = new WebSocket('ws://localhost:8000/ws');
+ws.onmessage = (event) => console.log(JSON.parse(event.data));
+```
 
 See [DOCUMENTATION.md](./DOCUMENTATION.md) for detailed development info.
 

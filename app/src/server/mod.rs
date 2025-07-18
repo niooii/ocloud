@@ -1,5 +1,6 @@
 pub mod web;
 pub mod controllers;
+pub mod models;
 pub mod error;
 pub mod validation;
 pub mod db_utils;
@@ -8,7 +9,13 @@ use web::*;
 use std::{env, sync::Arc};
 use axum::{middleware, response::{IntoResponse, Response}, serve::serve, Json, Router};
 use error::ServerError;
-use controllers::{files::{FileController, FileControllerInner}};
+use controllers::{files::{FileController, FileControllerInner}, websocket::{WebSocketController, WebSocketControllerInner}};
+
+#[derive(Clone)]
+pub struct ServerState {
+    pub file_controller: FileController,
+    pub ws_controller: WebSocketController,
+}
 use serde_json::json;                   
 use sqlx::{postgres::PgConnectOptions, PgPool};
 use tokio::{net::TcpListener, sync::RwLock};
@@ -50,13 +57,24 @@ pub async fn init() -> ServerResult<()> {
 }
 
 pub async fn create_server(db_pool: PgPool) -> Router {
-    trace!("Creating file controller...");
-    let mc = Arc::new(FileControllerInner::new(db_pool).await);
+    trace!("Creating WebSocket controller...");
+    let ws_controller = Arc::new(WebSocketControllerInner::new());
+    trace!("WebSocket controller created.");
+
+    trace!("Creating file controller with WebSocket support...");
+    let file_controller = Arc::new(FileControllerInner::new(db_pool, Arc::clone(&ws_controller)).await);
     trace!("File controller created.");
+
+    trace!("Creating server state...");
+    let server_state = ServerState {
+        file_controller: file_controller.clone(),
+        ws_controller: ws_controller.clone(),
+    };
+    trace!("Server state created.");
 
     trace!("Setting up routes...");
     let routes = Router::new()
-        .nest("", routes::routes(mc).await)
+        .nest("", routes::routes(file_controller, Some(ws_controller), server_state).await)
         .layer(middleware::map_response(main_response_mapper))
         .layer(middleware::from_fn(web::middleware::trace_request));
     trace!("Routes set up.");
@@ -108,5 +126,5 @@ pub async fn file_controller() -> ServerResult<FileController> {
     sqlx::migrate!("./migrations").run(&db_pool).await
         .expect("Failed to run migrations.");
 
-    Ok(Arc::new(FileControllerInner::new(db_pool).await))
+    Ok(Arc::new(FileControllerInner::new_no_ws(db_pool).await))
 }

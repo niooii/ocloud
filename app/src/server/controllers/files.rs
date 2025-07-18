@@ -10,9 +10,9 @@ use tokio::{fs, sync::{Notify, RwLock}};
 use key_mutex::tokio::KeyMutex;
 use tracing::{trace, warn};
 
-use crate::{config::SETTINGS, server::{controllers::model::{SFileEntryRow, SFileRow}, error::{ServerError, ServerResult}}};
+use crate::{config::SETTINGS, server::{models::files::{SFileEntryRow, SFileRow}, controllers::websocket::WebSocketController, error::{ServerError, ServerResult}}};
 
-use super::model::{FileUploadInfo, Media, SFile, VirtualPath};
+use crate::server::models::files::{FileUploadInfo, Media, SFile, VirtualPath};
 
 
 pub enum SFileCreateInfo<'a> {
@@ -30,14 +30,26 @@ pub type FileController = Arc<FileControllerInner>;
 #[derive(Clone)]
 pub struct FileControllerInner {
     db_pool: PgPool,
-    pub active_uploads: Arc<KeyMutex<String, ()>>
+    pub active_uploads: Arc<KeyMutex<String, ()>>,
+    ws: Option<WebSocketController>,
 }
 
 impl FileControllerInner {
-    pub async fn new(db_pool: PgPool) -> Self {
+    pub async fn new_no_ws(db_pool: PgPool) -> Self {
         let fc = Self {
             db_pool,
-            active_uploads: Arc::new(KeyMutex::new())
+            active_uploads: Arc::new(KeyMutex::new()),
+            ws: None,
+        };
+
+        fc
+    }
+
+    pub async fn new(db_pool: PgPool, ws: WebSocketController) -> Self {
+        let fc = Self {
+            db_pool,
+            active_uploads: Arc::new(KeyMutex::new()),
+            ws: Some(ws),
         };
 
         fc
@@ -99,6 +111,7 @@ impl FileControllerInner {
             
             trace!("Finalized upload: {}", true_path.to_string_lossy());  
         }
+
         // stage 3: insert the symbolic file into its table after creating all dirs
         self.make_all_dirs(&info.vpath, Some(&mut tx)).await?;
         let f = 
@@ -110,6 +123,11 @@ impl FileControllerInner {
 
         // finally commit transaction... phew
         tx.commit().await?;
+
+        // notify ws clients of file creation and upload completion
+        if let Some(ref ws) = self.ws {
+            // TODO!
+        }
     
         Ok(f)
     }
@@ -265,6 +283,11 @@ impl FileControllerInner {
         // If anything fails (delete db entries or delete on disk) then
         // the transaction doesn't go through
         tx.commit().await?;
+
+        if let Some(ref ws) = self.ws {
+            // TODO!
+        }
+
         Ok(())
     }
 
@@ -513,6 +536,11 @@ impl FileControllerInner {
         let mut sfile = SFile::from(result);
         sfile.full_path = to.to_string();
         sfile.top_level_name = to.name().unwrap_or("".into()).to_string();
+
+        // Notify WebSocket clients of file move
+        if let Some(ref ws) = self.ws {
+            // TODO!
+        }
         
         Ok(sfile)
     }
