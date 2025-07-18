@@ -2,12 +2,6 @@
 
 A cloud file storage server, with some extras
 
-## TODO
-- Add authentication and ReBAC
-- Add multi upload
-- Make frontend handle the displaying of videos and images like medal
-- Optional MD document editor in the frontend, google docs kinda
-
 ## Quick Start
 
 ```bash
@@ -32,7 +26,7 @@ Example: `curl http://localhost:8000/health`
 
 Note: path is a **directory** if it ends with '/'.
 
-Example: `curl http://localhost:8000/files/my-folder/`
+Example: `curl http://localhost:8000/files/root/my-folder/`
 
 #### `POST /files/[path]` 
 **Directory**: 
@@ -41,17 +35,17 @@ Example: `curl http://localhost:8000/files/my-folder/`
 
 All immediate directories are created upon any action.
 
-Example: `curl -X POST http://localhost:8000/files/folder/ -F "file=@myfile.txt"`
+Example: `curl -X POST http://localhost:8000/files/root/folder/ -F "file=@myfile.txt"`
 
 #### `DELETE /files/[path]`
 **File** - Deletes the file. Returns nothing.
 
-Example: `curl -X DELETE http://localhost:8000/files/myfile.txt`
+Example: `curl -X DELETE http://localhost:8000/files/root/myfile.txt`
 
-#### `PATCH /files`
+#### `PATCH /files/*`
 Move/rename files. Request body: `{"from": "/old/path", "to": "/new/path"}`
 
-Example: `curl -X PATCH http://localhost:8000/files -d '{"from":"/a.txt","to":"/b.txt"}' -H "Content-Type: application/json"`
+Example: `curl -X PATCH http://localhost:8000/files/root -d '{"from":"/a.txt","to":"/b.txt"}' -H "Content-Type: application/json"`
 
 ### WebSocket Real-time Events
 
@@ -70,8 +64,11 @@ const ws = new WebSocket('ws://localhost:8000/ws');
 ws.onmessage = (event) => console.log(JSON.parse(event.data));
 ```
 
-See [DOCUMENTATION.md](./DOCUMENTATION.md) for detailed development info.
-
 ## TODO
-- AUTH?????????
+- AUTH????????? (kinda and ReBAC)
+- tie each websocket connection to a user id (or not, depending on my next point)
+- default create a public folder where all files are available to everyone, even unauthenticated users (useful for sharing stuff). 
 - for each [file] uploaded, store a [file].meta that contains all the names the media is aliased under. can be used to restore the database and easily download everything
+- Add multi upload
+- Make frontend handle the displaying of videos and images like medal
+- Optional MD document editor in the frontend, google docs kinda

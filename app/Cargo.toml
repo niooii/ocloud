@@ -25,7 +25,7 @@ anyhow = "1.0.91"
 arboard = "3.4.1"
 clap = { version = "4.5.20", features = ["derive"] }
 dirs = "5.0.1"
-reqwest = { version = "0.12.8", features = ["multipart", "stream"] }
+reqwest = { version = "0.12.8", features = ["multipart", "stream", "json"] }
 serde = { version = "1.0.213", features = ["derive"] }
 tokio = { version = "1.40.0", features = ["full"] }
 tqdm = "0.7.0"
@@ -47,7 +47,7 @@ mime_guess = "2.0.5"
 nanoid = "0.4.0"
 serde_json = "1.0.128"
 sha2 = "0.10.8"
-sqlx = { version = "0.8.3", features = ["runtime-tokio-native-tls", "postgres", "macros", "chrono"] }
+sqlx = { version = "0.8.3", features = ["runtime-tokio-native-tls", "postgres", "macros", "chrono", "uuid"] }
 strum_macros = "0.26.4"
 enum_dispatch = "0.3"
 tower-http = { version = "0.6.2", features = ["cors"] }
@@ -63,6 +63,8 @@ thiserror = "1.0.69"
 tower = { version = "0.5.1", features = ["limit", "buffer", "timeout"] }
 tower_governor = "0.4.2"
 uuid = { version = "1.11.0", features = ["v4", "serde"] }
+argon2 = "0.5.3"
+rand_core = { version = "0.6.4", features = ["std"] }
 
 [dev-dependencies]
 tokio-test = "0.4.4"

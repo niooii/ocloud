@@ -1,13 +1,13 @@
-use std::{collections::HashMap, sync::Arc, future::Future, pin::Pin, sync::atomic::{AtomicU64, Ordering}};
+use std::{collections::HashMap, sync::Arc, sync::atomic::{AtomicU64, Ordering}};
 use axum::extract::ws::{Message, WebSocket};
 use futures::{SinkExt, StreamExt};
-use serde::{Deserialize, Serialize};
-use tokio::sync::{broadcast, RwLock};
+use serde::Serialize;
+use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 use enum_dispatch::enum_dispatch;
 
-use crate::server::{controllers::files::FileController, error::{ServerError, ServerResult}, models::files::VirtualPath, ServerState};
+use crate::server::{error::{ServerError, ServerResult}, models::files::CancelUploadEvent, ServerState};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct OutgoingWebSocketPayload<T: Serialize> {
@@ -75,6 +75,12 @@ impl WsIncomingEvent for Ping {
         }).await;
 
         Ok(())
+    }
+}
+
+impl Default for WebSocketControllerInner {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -168,7 +174,7 @@ impl WebSocketControllerInner {
     ) ->ServerResult<()> {
         // Parse JSON directly into the enum using serde tagged enum deserialization
         let event: WsIncomingEventType = serde_json::from_str(message)
-            .map_err(|e| ServerError::ValidationError {field: e.to_string()})?;
+            .map_err(|e| ServerError::ValidationError {message: e.to_string()})?;
         
         // Handle the event using enum dispatch
         event.handle(server_state, connection_id).await

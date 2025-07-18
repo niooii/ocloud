@@ -1,14 +1,20 @@
 use axum::extract::Request;
-use axum::http::HeaderValue;
+use axum::http::{HeaderValue, StatusCode};
 use axum::middleware::Next;
-use axum::response::Response;
+use axum::response::{Response, IntoResponse};
 use std::time::Instant;
+use std::collections::HashSet;
 // Temporarily disabled rate limiting due to complex configuration
 // use tower_governor::{
 //     governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
 // };
 use tracing::info_span;
 use uuid::Uuid;
+
+use crate::server::{
+    controllers::auth::AuthController,
+    error::ServerError,
+};
 
 pub async fn trace_request(mut request: Request, next: Next) -> Response {
     let start = Instant::now();
@@ -60,3 +66,187 @@ pub async fn trace_request(mut request: Request, next: Next) -> Response {
 //         config: std::sync::Arc::new(governor_conf),
 //     }
 // }
+
+/// Middleware for requiring authentication
+#[derive(Clone)]
+pub struct RequireAuth {
+    excluded_paths: HashSet<String>,
+}
+
+impl Default for RequireAuth {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RequireAuth {
+    pub fn new() -> Self {
+        Self {
+            excluded_paths: HashSet::new(),
+        }
+    }
+
+    pub fn exclude_paths(mut self, paths: Vec<String>) -> Self {
+        self.excluded_paths = paths.into_iter().collect();
+        self
+    }
+
+    pub async fn middleware(
+        self,
+        mut request: Request,
+        next: Next,
+    ) -> Result<Response, impl IntoResponse> {
+        let path = request.uri().path();
+
+        // Skip authentication for excluded paths
+        if self.excluded_paths.contains(path) {
+            return Ok(next.run(request).await);
+        }
+
+        // Get auth controller from extensions
+        let auth_controller = match request.extensions().get::<AuthController>() {
+            Some(controller) => controller.clone(),
+            None => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Auth controller not available"
+                ).into_response());
+            }
+        };
+
+        // Extract session ID from Authorization header
+        let session_id = match extract_session_id(&request) {
+            Some(id) => id,
+            None => {
+                return Err((
+                    StatusCode::UNAUTHORIZED,
+                    "Missing or invalid authorization header"
+                ).into_response());
+            }
+        };
+
+        // Validate session
+        let (user, _session) = match auth_controller.validate_session(session_id).await {
+            Ok(result) => result,
+            Err(ServerError::AuthenticationError { .. }) => {
+                return Err((
+                    StatusCode::UNAUTHORIZED,
+                    "Invalid or expired session"
+                ).into_response());
+            }
+            Err(e) => {
+                tracing::error!("Auth validation error: {}", e);
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Authentication service error"
+                ).into_response());
+            }
+        };
+
+        // Build auth context
+        let auth_context = match auth_controller.build_auth_context(user.id).await {
+            Ok(context) => context,
+            Err(e) => {
+                tracing::error!("Failed to build auth context: {}", e);
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to load user permissions"
+                ).into_response());
+            }
+        };
+
+        // Add auth context and session ID to request extensions
+        request.extensions_mut().insert(auth_context);
+        request.extensions_mut().insert(session_id);
+
+        Ok(next.run(request).await)
+    }
+}
+
+/// Extract session ID from Authorization header
+/// Expected format: "Bearer <session_id>"
+fn extract_session_id(request: &Request) -> Option<Uuid> {
+    let auth_header = request
+        .headers()
+        .get("authorization")?
+        .to_str()
+        .ok()?;
+
+    if !auth_header.starts_with("Bearer ") {
+        return None;
+    }
+
+    let token = auth_header.strip_prefix("Bearer ")?;
+    Uuid::parse_str(token).ok()
+}
+
+/// Session-based authentication middleware function
+/// Following book.md patterns for session management
+pub async fn require_auth(
+    mut request: Request,
+    next: Next,
+) -> Result<Response, impl IntoResponse> {
+    let path = request.uri().path();
+
+    // Skip authentication for excluded paths
+    if path == "/auth/register" || path == "/auth/login" {
+        return Ok(next.run(request).await);
+    }
+    // Get auth controller from extensions
+    let auth_controller = match request.extensions().get::<AuthController>() {
+        Some(controller) => controller.clone(),
+        None => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Auth controller not available"
+            ).into_response());
+        }
+    };
+
+    // Extract session ID from Authorization header
+    let session_id = match extract_session_id(&request) {
+        Some(id) => id,
+        None => {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "Missing or invalid authorization header"
+            ).into_response());
+        }
+    };
+
+    // Validate session
+    let (user, _session) = match auth_controller.validate_session(session_id).await {
+        Ok(result) => result,
+        Err(ServerError::AuthenticationError { .. }) => {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "Invalid or expired session"
+            ).into_response());
+        }
+        Err(e) => {
+            tracing::error!("Auth validation error: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Authentication service error"
+            ).into_response());
+        }
+    };
+
+    // Build auth context
+    let auth_context = match auth_controller.build_auth_context(user.id).await {
+        Ok(context) => context,
+        Err(e) => {
+            tracing::error!("Failed to build auth context: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to load user permissions"
+            ).into_response());
+        }
+    };
+
+    // Add auth context and session ID to request extensions
+    request.extensions_mut().insert(auth_context);
+    request.extensions_mut().insert(session_id);
+
+    Ok(next.run(request).await)
+}

@@ -5,7 +5,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::{multipart::{Form, Part}, Body, Client, Url};
 use tokio_util::{bytes::Bytes, io::ReaderStream};
 use futures_util::{stream::StreamExt, Stream};
-use tracing::{error, info, trace};
+use tracing::{error, trace};
 
 pub async fn handler(path: PathBuf, preserve: bool, dir: String) -> CliResult<String> {
     if let Err(e) = Url::parse(&CLI_CONFIG.server_url) {

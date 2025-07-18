@@ -1,29 +1,28 @@
 use crate::server::error::{ServerError, ServerResult};
-use std::path::Path;
 
 pub fn validate_filename(filename: &str) -> ServerResult<()> {
     if filename.is_empty() {
         return Err(ServerError::ValidationError {
-            field: "filename cannot be empty".to_string(),
+            message: "filename cannot be empty".to_string(),
         });
     }
 
     if filename.len() > 255 {
         return Err(ServerError::ValidationError {
-            field: "filename too long (max 255 characters)".to_string(),
+            message: "filename too long (max 255 characters)".to_string(),
         });
     }
 
     let invalid_chars = ['/', '\\', '<', '>', ':', '"', '|', '?', '*', '\0'];
     if filename.chars().any(|c| invalid_chars.contains(&c)) {
         return Err(ServerError::ValidationError {
-            field: "filename contains invalid characters".to_string(),
+            message: "filename contains invalid characters".to_string(),
         });
     }
 
     if filename.starts_with('.') && filename.len() <= 2 {
         return Err(ServerError::ValidationError {
-            field: "filename cannot be '.' or '..'".to_string(),
+            message: "filename cannot be '.' or '..'".to_string(),
         });
     }
 
@@ -33,25 +32,25 @@ pub fn validate_filename(filename: &str) -> ServerResult<()> {
 pub fn validate_path(path: &str) -> ServerResult<()> {
     if path.is_empty() {
         return Err(ServerError::ValidationError {
-            field: "path cannot be empty".to_string(),
+            message: "path cannot be empty".to_string(),
         });
     }
 
     if path.len() > 4096 {
         return Err(ServerError::ValidationError {
-            field: "path too long (max 4096 characters)".to_string(),
+            message: "path too long (max 4096 characters)".to_string(),
         });
     }
 
     if path.contains('\0') {
         return Err(ServerError::ValidationError {
-            field: "path contains null bytes".to_string(),
+            message: "path contains null bytes".to_string(),
         });
     }
 
     if path.contains("..") {
         return Err(ServerError::ValidationError {
-            field: "path traversal not allowed".to_string(),
+            message: "path traversal not allowed".to_string(),
         });
     }
 

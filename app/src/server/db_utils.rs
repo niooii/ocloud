@@ -2,7 +2,6 @@ use sqlx::{PgPool, Postgres, Transaction};
 use crate::server::error::{ServerError, ServerResult};
 use tracing::{info, warn};
 use std::future::Future;
-use std::pin::Pin;
 
 pub async fn execute_in_transaction<F, Fut, R>(
     pool: &PgPool,

@@ -18,13 +18,12 @@ impl<'ast> Visit<'ast> for WsEventCollector {
                 }
             }
             // Also check for the full path
-            if attr.path().segments.len() == 2 {
-                if attr.path().segments[0].ident == "ocloud_macros" 
+            if attr.path().segments.len() == 2
+                && attr.path().segments[0].ident == "ocloud_macros" 
                     && attr.path().segments[1].ident == "WsIncomingEvent" {
                     self.events.push(node.ident.to_string());
                     break;
                 }
-            }
         }
         syn::visit::visit_item_struct(self, node);
     }
@@ -56,7 +55,7 @@ fn scan_directory(dir: &str, collector: &mut WsEventCollector) {
                 if let Some(path_str) = path.to_str() {
                     scan_directory(path_str, collector);
                 }
-            } else if path.extension().map_or(false, |ext| ext == "rs") {
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
                 if let Ok(content) = fs::read_to_string(&path) {
                     if let Ok(file) = syn::parse_file(&content) {
                         collector.visit_file(&file);
@@ -79,11 +78,11 @@ fn generate_ws_enum_code(events: &[String]) -> String {
     }
     
     let variants_code: Vec<String> = events.iter()
-        .map(|name| format!("    {}({}),", name, name))
+        .map(|name| format!("    {name}({name}),"))
         .collect();
     
     let variant_names = events.iter()
-        .map(|name| format!("\"{}\"", name))
+        .map(|name| format!("\"{name}\""))
         .collect::<Vec<_>>()
         .join(", ");
     

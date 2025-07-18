@@ -1,16 +1,14 @@
 // controller.rs
-use std::{collections::HashMap, path::{Path, PathBuf}, sync::{Arc, Mutex}, time::{SystemTime, UNIX_EPOCH}};
+use std::{path::PathBuf, sync::Arc};
 
-use chrono::NaiveDateTime;
 use sqlx::query;
 use sqlx::query_as;
-use serde::{Serialize, Deserialize};
-use sqlx::{postgres::{PgArguments, PgQueryResult, PgRow}, query::{Query}, FromRow, PgPool, Postgres, Row, Transaction};
-use tokio::{fs, sync::{Notify, RwLock}};
+use sqlx::{postgres::{PgArguments, PgQueryResult}, query::{Query}, PgPool, Postgres, Transaction};
+use tokio::fs;
 use key_mutex::tokio::KeyMutex;
-use tracing::{trace, warn};
+use tracing::trace;
 
-use crate::{config::SETTINGS, server::{models::files::{SFileEntryRow, SFileRow}, controllers::websocket::WebSocketController, error::{ServerError, ServerResult}}};
+use crate::{config::SETTINGS, server::{models::files::SFileRow, controllers::websocket::WebSocketController, error::{ServerError, ServerResult}}};
 
 use crate::server::models::files::{FileUploadInfo, Media, SFile, VirtualPath};
 
@@ -36,23 +34,23 @@ pub struct FileControllerInner {
 
 impl FileControllerInner {
     pub async fn new_no_ws(db_pool: PgPool) -> Self {
-        let fc = Self {
+        
+
+        Self {
             db_pool,
             active_uploads: Arc::new(KeyMutex::new()),
             ws: None,
-        };
-
-        fc
+        }
     }
 
     pub async fn new(db_pool: PgPool, ws: WebSocketController) -> Self {
-        let fc = Self {
+        
+
+        Self {
             db_pool,
             active_uploads: Arc::new(KeyMutex::new()),
             ws: Some(ws),
-        };
-
-        fc
+        }
     }
 }
 

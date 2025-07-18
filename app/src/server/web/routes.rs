@@ -5,7 +5,6 @@ use tower_http::cors::CorsLayer;
 
 use crate::server::{controllers::{files::FileController, websocket::WebSocketController}, ServerState};
 use super::handlers::{files, auth, ws};
-use super::middleware;
 
 pub async fn routes(controller: FileController, ws_controller: Option<WebSocketController>, server_state: ServerState) -> Router {
     let cors = CorsLayer::new()
@@ -20,7 +19,7 @@ pub async fn routes(controller: FileController, ws_controller: Option<WebSocketC
 
     let mut router = Router::new()
         .nest("/", files::routes(controller.clone()))
-        .nest("/", auth::routes())
+        .nest("/", auth::routes(server_state.auth_controller.clone()))
         .route("/ping", get(ping))
         .route("/health", get(health_check));
     

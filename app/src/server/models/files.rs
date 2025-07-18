@@ -23,6 +23,8 @@ pub struct Media {
     pub file_size: i64,
     // The SHA-256 checksum of the file.
     pub file_hash: String,
+    // Owner of the media
+    pub user_id: Option<i64>,
 }
 
 impl Media {
@@ -79,6 +81,8 @@ pub struct SFileRow {
     // times will always be in UTC
     pub created_at: NaiveDateTime,
     pub modified_at: NaiveDateTime,
+    // Owner of the file
+    pub user_id: Option<i64>,
 }
 
 // A row from the sfile_entries table
@@ -275,7 +279,7 @@ impl VirtualPath {
     pub fn to_dir(&mut self) {
         if !self.is_dir {
             self.is_dir = true;
-            self.path = format!("{}/", self.to_string()).into();
+            self.path = format!("{self}/").into();
         }
     }
 
@@ -288,7 +292,7 @@ impl VirtualPath {
 
     pub fn as_dir(&self) -> Self {
         Self {
-            path: format!("{}/", self.to_string()).into(),
+            path: format!("{self}/").into(),
             is_dir: true
         }
     }
@@ -423,8 +427,7 @@ impl<'de> Deserialize<'de> for VirtualPath {
         D: serde::Deserializer<'de> {
         let val = String::deserialize(deserializer)?;
         if !val.starts_with("root/") {
-            return Err(ServerError::InternalError { message: "Path should start with 'root/'.".into() })
-                .map_err(D::Error::custom);
+            return Err(D::Error::custom(ServerError::InternalError { message: "Path should start with 'root/'.".into() }));
         }
         Ok(
             VirtualPath::from(
@@ -469,15 +472,7 @@ impl fmt::Display for VirtualPath {
         } else {
             self.path.as_os_str().to_string_lossy().into_owned()
         };
-        write!(f, "{}", path_str)
-    }
-}
-
-impl VirtualPath {
-    /// Convenience method for getting string representation
-    /// Does not include the trailing '/' whether it is a directory or not
-    pub fn to_string(&self) -> String {
-        format!("{}", self)
+        write!(f, "{path_str}")
     }
 }
 

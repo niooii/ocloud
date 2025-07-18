@@ -2,7 +2,6 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Serialize;
-use std::fmt;
 use thiserror::Error;
 use tracing::error;
 
@@ -32,10 +31,16 @@ pub enum ServerError {
     PathDoesntExist,
     #[error("Path already exists")]
     PathAlreadyExists,
-    #[error("Validation failed: {field}")]
-    ValidationError { field: String },
+    #[error("Validation failed: {message}")]
+    ValidationError { message: String },
     #[error("Rate limit exceeded")]
     RateLimitExceeded,
+    #[error("Authentication failed: {message}")]
+    AuthenticationError { message: String },
+    #[error("Authorization failed: {message}")]
+    AuthorizationError { message: String },
+    #[error("Database error: {message}")]
+    DatabaseError { message: String },
 }
 
 #[derive(Serialize)]
@@ -62,11 +67,25 @@ impl ServerError {
                     details: None,
                 },
             ),
-            ServerError::ValidationError { field } => (
+            ServerError::ValidationError { message } => (
                 StatusCode::BAD_REQUEST,
                 ErrorResponse {
                     error: "Validation failed".to_string(),
-                    details: Some(format!("Invalid field: {}", field)),
+                    details: Some(message.clone()),
+                },
+            ),
+            ServerError::AuthenticationError { message } => (
+                StatusCode::UNAUTHORIZED,
+                ErrorResponse {
+                    error: "Authentication failed".to_string(),
+                    details: Some(message.clone()),
+                },
+            ),
+            ServerError::AuthorizationError { message } => (
+                StatusCode::FORBIDDEN,
+                ErrorResponse {
+                    error: "Access denied".to_string(),
+                    details: Some(message.clone()),
                 },
             ),
             ServerError::PathAlreadyExists => (
@@ -85,6 +104,7 @@ impl ServerError {
             ),
             ServerError::DatabaseConnectionError
             | ServerError::DatabaseQueryError { .. }
+            | ServerError::DatabaseError { .. }
             | ServerError::IOError { .. }
             | ServerError::InternalError { .. } => {
                 error!("Internal server error: {}", self);
@@ -119,7 +139,7 @@ impl IntoResponse for ServerError {
 
 impl From<serde_json::Error> for ServerError {
     fn from(value: serde_json::Error) -> Self {
-        Self::InternalError { message: format!("JSON serialization error: {}", value) }
+        Self::InternalError { message: format!("JSON serialization error: {value}") }
     }
 }
 

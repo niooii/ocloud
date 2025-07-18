@@ -1,7 +1,6 @@
 use std::env::set_var;
 
 use cli::error::CliResult;
-use tracing::trace;
 use tracing_subscriber::EnvFilter;
 
 mod config;

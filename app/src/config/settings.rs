@@ -114,8 +114,7 @@ impl TryFrom<String> for Environment {
             "production" | "prod" => Ok(Self::Production),
             "testing" | "test" => Ok(Self::Testing),
             other => Err(format!(
-                "{} is not a supported environment. Use either `development`, `production`, or `testing`.",
-                other
+                "{other} is not a supported environment. Use either `development`, `production`, or `testing`."
             )),
         }
     }
@@ -152,7 +151,7 @@ impl Settings {
         let environment: Environment = std::env::var("APP_ENVIRONMENT")
             .unwrap_or_else(|_| default_env.into())
             .try_into()
-            .map_err(|e| ConfigError::Message(e))?;
+            .map_err(ConfigError::Message)?;
 
         let base_config: BaseConfig = parse_or_prompt_yaml();
         let environment_config = match environment {

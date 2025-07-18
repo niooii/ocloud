@@ -6,19 +6,20 @@ pub mod validation;
 pub mod db_utils;
 use tracing::{trace, warn};
 use web::*;
-use std::{env, sync::Arc};
+use std::sync::Arc;
 use axum::{middleware, response::{IntoResponse, Response}, serve::serve, Json, Router};
 use error::ServerError;
-use controllers::{files::{FileController, FileControllerInner}, websocket::{WebSocketController, WebSocketControllerInner}};
+use controllers::{files::{FileController, FileControllerInner}, websocket::{WebSocketController, WebSocketControllerInner}, auth::AuthController};
 
 #[derive(Clone)]
 pub struct ServerState {
     pub file_controller: FileController,
     pub ws_controller: WebSocketController,
+    pub auth_controller: AuthController,
 }
-use serde_json::json;                   
+                   
 use sqlx::{postgres::PgConnectOptions, PgPool};
-use tokio::{net::TcpListener, sync::RwLock};
+use tokio::net::TcpListener;
 use crate::config::SETTINGS;
 
 use error::ServerResult;
@@ -61,6 +62,10 @@ pub async fn create_server(db_pool: PgPool) -> Router {
     let ws_controller = Arc::new(WebSocketControllerInner::new());
     trace!("WebSocket controller created.");
 
+    trace!("Creating auth controller...");
+    let auth_controller = AuthController::new(db_pool.clone());
+    trace!("Auth controller created.");
+
     trace!("Creating file controller with WebSocket support...");
     let file_controller = Arc::new(FileControllerInner::new(db_pool, Arc::clone(&ws_controller)).await);
     trace!("File controller created.");
@@ -69,6 +74,7 @@ pub async fn create_server(db_pool: PgPool) -> Router {
     let server_state = ServerState {
         file_controller: file_controller.clone(),
         ws_controller: ws_controller.clone(),
+        auth_controller: auth_controller.clone(),
     };
     trace!("Server state created.");
 
@@ -125,6 +131,16 @@ pub async fn file_controller() -> ServerResult<FileController> {
 
     sqlx::migrate!("./migrations").run(&db_pool).await
         .expect("Failed to run migrations.");
+
+    Ok(Arc::new(FileControllerInner::new_no_ws(db_pool).await))
+}
+
+/// Only useful for nuking lol
+pub async fn file_controller_no_migrate() -> ServerResult<FileController> {
+    init().await?;
+    let db_url = SETTINGS.database.connection_string();
+
+    let db_pool = PgPool::connect(&db_url).await?;
 
     Ok(Arc::new(FileControllerInner::new_no_ws(db_pool).await))
 }

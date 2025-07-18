@@ -1,11 +1,12 @@
 pub mod files;
 pub mod websocket;
+pub mod auth;
 
 #[cfg(test)]
 mod tests {
     use crate::server::models::files::{VirtualPath, VirtualPathError};
 
-    use super::*;
+    
 
     #[test]
     fn vpath_semantics() {
@@ -26,7 +27,7 @@ mod tests {
     fn vpath_ergonomics() {
         // Test Display trait
         let path = VirtualPath::from("root/documents/");
-        assert_eq!(format!("{}", path), "root/documents");
+        assert_eq!(format!("{path}"), "root/documents");
         
         // Test Clone
         let cloned = path.clone();

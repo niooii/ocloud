@@ -33,7 +33,7 @@ async fn configure_test_database(db_name: &str) -> PgPool {
         .expect("Failed to connect to Postgres");
 
     connection
-        .execute(format!(r#"CREATE DATABASE "{}";"#, db_name).as_str())
+        .execute(format!(r#"CREATE DATABASE "{db_name}";"#).as_str())
         .await
         .expect("Failed to create database");
 
@@ -67,8 +67,7 @@ async fn cleanup_database(db_name: String) {
     connection
         .execute(
             format!(
-                r#"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{}';"#,
-                db_name
+                r#"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{db_name}';"#
             )
             .as_str(),
         )
@@ -76,7 +75,7 @@ async fn cleanup_database(db_name: String) {
         .ok();
 
     connection
-        .execute(format!(r#"DROP DATABASE "{}";"#, db_name).as_str())
+        .execute(format!(r#"DROP DATABASE "{db_name}";"#).as_str())
         .await
         .ok();
 }
@@ -93,4 +92,42 @@ async fn run_test_server_with_listener(listener: TcpListener, pg_connect_opts: P
     // Serve with existing listener
     serve(listener, routes.into_make_service()).await?;
     Ok(())
+}
+
+pub struct TestApp {
+    pub address: String,
+    pub db_pool: PgPool,
+    pub db_name: String,
+}
+
+impl TestApp {
+    pub async fn spawn() -> TestApp {
+        Lazy::force(&TRACING);
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("Failed to bind random port");
+        let port = listener.local_addr().unwrap().port();
+        let address = format!("http://127.0.0.1:{port}");
+
+        let db_name = Uuid::new_v4().to_string();
+        let db_pool = configure_test_database(&db_name).await;
+
+        let db_opts = PgConnectOptions::new()
+            .host(&SETTINGS.database.host)
+            .username(&SETTINGS.database.username)
+            .password(&SETTINGS.database.password)
+            .port(SETTINGS.database.port)
+            .database(&db_name);
+
+        let _server_handle = tokio::spawn(run_test_server_with_listener(listener, db_opts));
+
+        TestApp {
+            address,
+            db_pool,
+            db_name,
+        }
+    }
+
+    pub async fn cleanup(self) {
+        cleanup_database(self.db_name).await;
+    }
 }

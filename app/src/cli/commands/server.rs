@@ -28,7 +28,7 @@ pub async fn handler(command: ServerCommand) -> CliResult<()> {
                 .unwrap_or(false);
             
             if proceed {
-                let files = server::file_controller().await?;
+                let files = server::file_controller_no_migrate().await?;
                 files.nuke().await?;
                 println!("Finish.");
             } else {

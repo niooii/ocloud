@@ -5,9 +5,9 @@ use crate::{config::SETTINGS, server::models::files::SFile};
 use tokio::{fs::File, io::AsyncWriteExt};
 use sha2::{Digest, Sha256};
 use tokio::fs;
-use tracing::{error, trace, trace_span};
+use tracing::{error, trace};
 
-use crate::{server::{controllers::{files::FileController, websocket::WebSocketController}, models::files::{FileUploadInfo, Media, VirtualPath}}};
+use crate::server::{controllers::files::FileController, models::files::{FileUploadInfo, Media, VirtualPath}};
 use crate::server::error::{ServerError, ServerResult};
 
 pub fn routes(controller: FileController) -> Router {
@@ -60,8 +60,8 @@ pub async fn upload_or_mk_dirs(
             
             // Name should be the name of the file, including the extension.
             let name: String = field.name().expect("File has no name??").to_string();
-            trace!("Got file: {name}");
-            trace!("for path: {}", path.to_string());
+            // trace!("Got file: {name}");
+            // trace!("for path: {}", path.to_string());
             
             if path.to_string_with_trailing().is_empty() {
                 path = VirtualPath::root();
@@ -77,15 +77,15 @@ pub async fn upload_or_mk_dirs(
             let temp_path: PathBuf = save_dir.join(
                 format!("./tmp_{now}_{name}")
             );
-
+            println!("1");
             let mut file: File = File::create(&temp_path).await
                 .map_err(|e| ServerError::IOError { message: e.to_string() } )?;
             // i64 type because postgres doesnt support unsigned gg
-
+println!("2");
             let mut file_size: i64 = 0;
             const PROGRESS_THRESHOLD: u64 = 1024 * 1024; // 1MB
             let mut last_progress_report: u64 = 0;
-            
+            println!("3");
             while let Some(chunk) = field.chunk().await
                 .map_err(|e| ServerError::AxumError { message: format!("Chunk error: {}", e.body_text()) })? {
                 
@@ -174,7 +174,7 @@ pub async fn get_file_or_list_dir(
         res.headers_mut().append(
             header::CONTENT_DISPOSITION,
             HeaderValue::from_str(
-                &format!("inline; filename=\"{}\"", file_name)
+                &format!("inline; filename=\"{file_name}\"")
             ).map_err(|_e| ServerError::InternalError { message: "Parse error".to_string() })?
         );
 
