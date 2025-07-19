@@ -181,7 +181,33 @@ fn extract_session_id(request: &Request) -> Option<Uuid> {
 }
 
 /// Session-based authentication middleware function
-/// Following book.md patterns for session management
+/// Middleware that optionally extracts auth context without requiring it
+pub async fn optional_auth(mut request: Request, next: Next) -> Response {
+    // Get auth controller from extensions
+    if let Some(auth_controller) = request.extensions().get::<AuthController>() {
+        let auth_controller = auth_controller.clone();
+        
+        // Try to extract authorization header
+        if let Some(auth_header) = request.headers().get("authorization") {
+            if let Ok(auth_str) = auth_header.to_str() {
+                if let Some(token) = auth_str.strip_prefix("Bearer ") {
+                    if let Ok(session_uuid) = token.parse::<Uuid>() {
+                        // Try to validate session and build auth context
+                        if let Ok((user, _session)) = auth_controller.validate_session(session_uuid).await {
+                            if let Ok(auth_context) = auth_controller.build_auth_context(user.id).await {
+                                // Add auth context to request extensions
+                                request.extensions_mut().insert(auth_context);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    next.run(request).await
+}
+
 pub async fn require_auth(
     mut request: Request,
     next: Next,

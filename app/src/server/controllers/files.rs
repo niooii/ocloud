@@ -11,15 +11,64 @@ use tracing::trace;
 use crate::{config::SETTINGS, server::{models::files::SFileRow, controllers::websocket::WebSocketController, error::{ServerError, ServerResult}}};
 
 use crate::server::models::files::{FileUploadInfo, Media, SFile, VirtualPath};
+use crate::server::models::auth::RelationshipType;
+
+/// File visibility status
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileVisibility {
+    Private,
+    Public,
+}
+
+impl From<bool> for FileVisibility {
+    fn from(is_public: bool) -> Self {
+        if is_public {
+            FileVisibility::Public
+        } else {
+            FileVisibility::Private
+        }
+    }
+}
+
+impl From<FileVisibility> for bool {
+    fn from(visibility: FileVisibility) -> Self {
+        match visibility {
+            FileVisibility::Public => true,
+            FileVisibility::Private => false,
+        }
+    }
+}
+
+/// File permission operations
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FilePermission {
+    Read,
+    Write,
+    Delete,
+    Admin,
+}
+
+impl FilePermission {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            FilePermission::Read => "read",
+            FilePermission::Write => "write", 
+            FilePermission::Delete => "delete",
+            FilePermission::Admin => "admin",
+        }
+    }
+}
 
 
 pub enum SFileCreateInfo<'a> {
     Dir {
-        path: &'a VirtualPath
+        path: &'a VirtualPath,
+        user_id: i64,
     },
     File {
         path: &'a VirtualPath,
         media_id: i64,
+        user_id: i64,
     }
 }
 
@@ -33,6 +82,10 @@ pub struct FileControllerInner {
 }
 
 impl FileControllerInner {
+    pub fn db_pool(&self) -> &PgPool {
+        &self.db_pool
+    }
+
     pub async fn new_no_ws(db_pool: PgPool) -> Self {
         
 
@@ -111,13 +164,31 @@ impl FileControllerInner {
         }
 
         // stage 3: insert the symbolic file into its table after creating all dirs
-        self.make_all_dirs(&info.vpath, Some(&mut tx)).await?;
+        self.make_all_dirs(&info.vpath, info.user_id, Some(&mut tx)).await?;
         let f = 
             self.make_file(
                 &info.vpath,
                 media.id,
+                info.user_id,
                 Some(&mut tx)
             ).await?;
+
+        // Create resource and grant owner permission
+        let resource_id = query!(
+            r"INSERT INTO resources (resource_type, resource_id) 
+            VALUES ($1, $2) 
+            RETURNING id",
+            "sfile",
+            f.id as i64
+        ).fetch_one(&mut *tx).await?;
+
+        query!(
+            r"INSERT INTO user_resource_relationships (user_id, resource_id, relationship, granted_by) 
+            VALUES ($1, $2, $3, $1)",
+            info.user_id,
+            resource_id.id,
+            RelationshipType::Owner as RelationshipType
+        ).execute(&mut *tx).await?;
 
         // finally commit transaction... phew
         tx.commit().await?;
@@ -128,6 +199,28 @@ impl FileControllerInner {
         }
     
         Ok(f)
+    }
+
+    pub async fn get_sfile(&self, vpath: &VirtualPath) -> ServerResult<SFile> {
+        let sfile_id = self.resolve_path_to_sfile_id(vpath).await?;
+        let row = query_as!(
+            SFileRow,
+            "SELECT * FROM sfiles WHERE id = $1",
+            sfile_id,
+        )
+        .fetch_optional(&self.db_pool).await?
+        .ok_or(ServerError::PathDoesntExist)?;
+        
+        Ok(SFile {
+            id: row.id as u64,
+            media_id: row.media_id.map(|id| id as u64),
+            is_dir: row.is_dir,
+            full_path: vpath.to_string(),
+            created_at: row.created_at.and_utc(),
+            modified_at: row.modified_at.and_utc(),
+            top_level_name: vpath.name().unwrap_or("".into()),
+            is_public: row.is_public,
+        })
     }
 
     pub async fn get_media(&self, vpath: &VirtualPath) -> ServerResult<Media> {
@@ -294,9 +387,9 @@ impl FileControllerInner {
         info: SFileCreateInfo<'_>, 
         transaction: Option<&mut Transaction<'_, Postgres>>
     ) -> ServerResult<SFile> {
-        let (path, media_id, is_dir) = match info {
-            SFileCreateInfo::Dir { path } => (path, None, true),
-            SFileCreateInfo::File { path, media_id } => (path, Some(media_id), false),
+        let (path, media_id, is_dir, user_id) = match info {
+            SFileCreateInfo::Dir { path, user_id } => (path, None, true, user_id),
+            SFileCreateInfo::File { path, media_id, user_id } => (path, Some(media_id), false, user_id),
         };
 
         let mut default_transaction = None;
@@ -332,20 +425,23 @@ impl FileControllerInner {
         // create the sfile 
         let sfile_row = query_as!(
             SFileRow,
-            r"INSERT INTO sfiles (media_id, is_dir)
-            VALUES ($1, $2)
+            r"INSERT INTO sfiles (media_id, is_dir, user_id, is_public)
+            VALUES ($1, $2, $3, $4)
             RETURNING *",
             media_id,
-            is_dir
+            is_dir,
+            user_id,
+            false // Default to private
         ).fetch_one(&mut **tx).await?;
 
         // create directory entry 
         query!(
-            r"INSERT INTO sfile_entries (parent_sfile_id, filename, child_sfile_id)
-            VALUES ($1, $2, $3)",
+            r"INSERT INTO sfile_entries (parent_sfile_id, filename, child_sfile_id, user_id)
+            VALUES ($1, $2, $3, $4)",
             parent_sfile_id,
             filename,
-            sfile_row.id
+            sfile_row.id,
+            user_id
         ).execute(&mut **tx).await.map_err(|e| {
             let unique_violation = e.as_database_error()
                 .and_then(|d| d.code())
@@ -372,11 +468,12 @@ impl FileControllerInner {
         &self, 
         vpath: &VirtualPath, 
         media_id: i64,
+        user_id: i64,
         transaction: Option<&mut Transaction<'_, Postgres>>
     ) -> ServerResult<SFile> {
         vpath.err_if_dir()?;
         self._create_file(
-            SFileCreateInfo::File { path: vpath, media_id }, 
+            SFileCreateInfo::File { path: vpath, media_id, user_id }, 
             transaction
         ).await
     }
@@ -384,11 +481,12 @@ impl FileControllerInner {
     pub async fn make_dir(
         &self, 
         vpath: &VirtualPath, 
+        user_id: i64,
         transaction: Option<&mut Transaction<'_, Postgres>>
     ) -> ServerResult<SFile> {
         vpath.err_if_file()?;
         self._create_file(
-            SFileCreateInfo::Dir { path: vpath }, 
+            SFileCreateInfo::Dir { path: vpath, user_id }, 
             transaction
         ).await
     }
@@ -396,13 +494,37 @@ impl FileControllerInner {
     pub async fn list_dir(
         &self,
         vpath: &VirtualPath,
-        
+        user_id: Option<i64>, // None for anonymous users browsing public dirs
     ) -> ServerResult<Option<Vec<SFile>>> {
         vpath.err_if_file()?;
 
         let dir_sfile_id = self.resolve_path_to_sfile_id(vpath).await?;
 
-        // Single query_as! to get structured results directly
+        // Get the directory's owner to determine whose files to show
+        let dir_owner = query!(
+            "SELECT user_id FROM sfiles WHERE id = $1",
+            dir_sfile_id
+        ).fetch_optional(&self.db_pool).await?
+        .and_then(|row| row.user_id)
+        .ok_or(ServerError::PathDoesntExist)?;
+
+        // Determine which user's files to show based on context
+        let target_user_id = match user_id {
+            Some(uid) if uid == dir_owner => {
+                // Authenticated user browsing their own directory - show all their files
+                uid
+            },
+            Some(_uid) => {
+                // Authenticated user browsing someone else's directory - show directory owner's files
+                dir_owner
+            },
+            None => {
+                // Anonymous user - show directory owner's files
+                dir_owner
+            }
+        };
+
+        // Get files belonging to the target user in this directory
         let results = query!(
             r"SELECT 
                 sf.id,
@@ -410,12 +532,15 @@ impl FileControllerInner {
                 sf.is_dir,
                 sf.created_at,
                 sf.modified_at,
+                sf.is_public,
                 se.filename
             FROM sfile_entries se
             JOIN sfiles sf ON se.child_sfile_id = sf.id
-            WHERE se.parent_sfile_id = $1
+            WHERE se.parent_sfile_id = $1 
+            AND se.user_id = $2
             ORDER BY se.filename",
-            dir_sfile_id
+            dir_sfile_id,
+            target_user_id
         ).fetch_all(&self.db_pool).await?;
 
         let base_path = vpath.to_string();
@@ -432,6 +557,7 @@ impl FileControllerInner {
                 created_at: row.created_at.and_utc(),
                 modified_at: row.modified_at.and_utc(),
                 top_level_name: row.filename,
+                is_public: row.is_public,
             }
         }).collect();
 
@@ -445,6 +571,7 @@ impl FileControllerInner {
     pub async fn make_all_dirs(
         &self, 
         vpath: &VirtualPath, 
+        user_id: i64,
         transaction: Option<&mut Transaction<'_, Postgres>>
     ) -> ServerResult<Vec<SFile>> {
         let mut parts = vpath.path_parts_no_root();
@@ -478,7 +605,7 @@ impl FileControllerInner {
             }
 
             let create_res = self
-                .make_dir(&curr, Some(transaction))
+                .make_dir(&curr, user_id, Some(transaction))
                 .await;
 
             vec.push(create_res?);
@@ -613,5 +740,73 @@ impl FileControllerInner {
         } else {
             q.execute(&self.db_pool).await
         }
+    }
+
+    /// Set the visibility status of a file or directory
+    pub async fn set_file_visibility(&self, vpath: &VirtualPath, visibility: FileVisibility) -> ServerResult<()> {
+        let sfile_id = self.resolve_path_to_sfile_id(vpath).await?;
+        let is_public: bool = visibility.into();
+        
+        query!(
+            "UPDATE sfiles SET is_public = $1 WHERE id = $2",
+            is_public,
+            sfile_id
+        )
+        .execute(&self.db_pool)
+        .await?;
+        
+        Ok(())
+    }
+
+    /// Get the visibility status of a file or directory
+    pub async fn get_file_visibility(&self, vpath: &VirtualPath) -> ServerResult<FileVisibility> {
+        let sfile_id = self.resolve_path_to_sfile_id(vpath).await?;
+        
+        let result = query!(
+            "SELECT is_public FROM sfiles WHERE id = $1",
+            sfile_id
+        )
+        .fetch_one(&self.db_pool)
+        .await?;
+        
+        Ok(FileVisibility::from(result.is_public))
+    }
+
+    /// Set file visibility by filename (helper for tests)
+    pub async fn set_file_visibility_by_name(&self, filename: &str, visibility: FileVisibility) -> ServerResult<()> {
+        let is_public: bool = visibility.into();
+        
+        query!(
+            "UPDATE sfiles SET is_public = $1 WHERE id = (
+                SELECT s.id FROM sfiles s 
+                JOIN sfile_entries se ON s.id = se.child_sfile_id 
+                WHERE se.filename = $2
+            )",
+            is_public,
+            filename
+        )
+        .execute(&self.db_pool)
+        .await?;
+        
+        Ok(())
+    }
+
+    /// Set directory visibility by name (helper for tests)
+    pub async fn set_directory_visibility_by_name(&self, dirname: &str, visibility: FileVisibility) -> ServerResult<()> {
+        let is_public: bool = visibility.into();
+        
+        query!(
+            "UPDATE sfiles SET is_public = $1 WHERE id = (
+                SELECT s.id FROM sfiles s 
+                JOIN sfile_entries se ON s.id = se.child_sfile_id 
+                WHERE se.filename = $2 AND s.is_dir = TRUE
+            )",
+            is_public,
+            dirname
+        )
+        .execute(&self.db_pool)
+        .await?;
+        
+        Ok(())
     }
 }

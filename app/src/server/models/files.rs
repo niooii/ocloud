@@ -69,7 +69,9 @@ pub struct SFile {
     pub created_at: DateTime<Utc>,
     pub modified_at: DateTime<Utc>,
     // Either the name of the directory or the file
-    pub top_level_name: String
+    pub top_level_name: String,
+    // Whether file/folder is publicly accessible
+    pub is_public: bool,
 }
 
 // A row from the sfiles table (new schema - no paths stored)
@@ -83,6 +85,8 @@ pub struct SFileRow {
     pub modified_at: NaiveDateTime,
     // Owner of the file
     pub user_id: Option<i64>,
+    // Whether file/folder is publicly accessible
+    pub is_public: bool,
 }
 
 // A row from the sfile_entries table
@@ -103,6 +107,7 @@ pub struct SFileWithEntry {
     pub is_dir: bool,
     pub created_at: NaiveDateTime,
     pub modified_at: NaiveDateTime,
+    pub is_public: bool,
     // From sfile_entries table
     pub filename: String,
     pub parent_sfile_id: Option<i64>,
@@ -124,6 +129,7 @@ impl From<&SFileRow> for SFile {
             created_at: value.created_at.and_utc(),
             modified_at: value.modified_at.and_utc(),
             top_level_name: String::new(), // Will be populated separately
+            is_public: value.is_public,
         }
     }
 }
@@ -138,6 +144,7 @@ impl From<SFileWithEntry> for SFile {
             created_at: value.created_at.and_utc(),
             modified_at: value.modified_at.and_utc(),
             top_level_name: value.filename,
+            is_public: value.is_public,
         }
     }
 }
@@ -494,7 +501,8 @@ pub struct FileUploadInfo {
     pub temp_path: PathBuf,
     pub file_size: i64,
     pub file_hash: String,
-    pub vpath: VirtualPath
+    pub vpath: VirtualPath,
+    pub user_id: i64,
 }           
 
 // Websocket (outgoing) events

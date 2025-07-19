@@ -55,11 +55,19 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 -- Add user_id to existing tables
 ALTER TABLE sfiles ADD COLUMN user_id BIGINT;
 ALTER TABLE media ADD COLUMN user_id BIGINT;
+ALTER TABLE sfile_entries ADD COLUMN user_id BIGINT;
+
+-- Drop old unique constraint and add new one that includes user_id
+ALTER TABLE sfile_entries DROP CONSTRAINT IF EXISTS sfile_entries_parent_sfile_id_filename_key;
+ALTER TABLE sfile_entries ADD CONSTRAINT sfile_entries_parent_filename_user_unique 
+    UNIQUE (parent_sfile_id, filename, user_id);
 
 -- Add foreign key constraints
 ALTER TABLE sfiles ADD CONSTRAINT fk_sfiles_user 
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE media ADD CONSTRAINT fk_media_user 
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE sfile_entries ADD CONSTRAINT fk_sfile_entries_user 
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL;
 
 -- Indexes for performance
@@ -71,4 +79,5 @@ CREATE INDEX idx_user_sessions_user ON user_sessions(user_id);
 CREATE INDEX idx_user_sessions_expires ON user_sessions(expires_at);
 CREATE INDEX idx_sfiles_user ON sfiles(user_id);
 CREATE INDEX idx_media_user ON media(user_id);
+CREATE INDEX idx_sfile_entries_user ON sfile_entries(user_id);
 

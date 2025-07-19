@@ -20,6 +20,8 @@ Example: `curl http://localhost:8000/health`
 
 ### File Management
 
+**Note: All paths must start with "root/", not "/root/" or "/"**
+
 #### `GET /files/[path]`
 **File** - Returns the binary contents of the file. Content type depends on the file's extension.  
 **Directory** - Lists the directory contents. Returns a JSON array of files.
@@ -28,7 +30,7 @@ Note: path is a **directory** if it ends with '/'.
 
 Example: `curl http://localhost:8000/files/root/my-folder/`
 
-#### `POST /files/[path]` 
+#### `POST /files/root/[dir]` 
 **Directory**: 
 - Posts the *first* file sent in the form only. Send multiple requests to post multiple files. (TODO! fix this this is horrible) Returns the new file in a JSON array of length 1.
 - If there is no request body or file in the form, **creates all the immediate directories** and returns the directories newly created in a JSON array.
@@ -42,10 +44,104 @@ Example: `curl -X POST http://localhost:8000/files/root/folder/ -F "file=@myfile
 
 Example: `curl -X DELETE http://localhost:8000/files/root/myfile.txt`
 
-#### `PATCH /files/*`
-Move/rename files. Request body: `{"from": "/old/path", "to": "/new/path"}`
+#### `PATCH /files`
+Move/rename files. Request body: `{"from": "root/old/path", "to": "root/new/path"}`
 
-Example: `curl -X PATCH http://localhost:8000/files/root -d '{"from":"/a.txt","to":"/b.txt"}' -H "Content-Type: application/json"`
+Example: `curl -X PATCH http://localhost:8000/files/root -d '{"from":"root/a.txt","to":"root/b.txt"}' -H "Content-Type: application/json"`
+
+### Authentication
+
+#### `POST /auth/register`
+Register a new user. Request body:
+```json
+{
+  "username": "user",
+  "email": "user@example.com", 
+  "password": "password"
+}
+```
+
+Returns user info and session ID.
+
+Example:
+```bash
+curl -X POST http://localhost:8000/auth/register \
+  -d '{
+    "username": "testuser",
+    "email": "test@example.com",
+    "password": "password123"
+  }' \
+  -H "Content-Type: application/json"
+```
+
+#### `POST /auth/login`
+Login with username/email and password. Request body:
+```json
+{
+  "username": "user",
+  "password": "password"
+}
+```
+
+Returns user info and session ID for Bearer token authentication.
+
+Example:
+```bash
+curl -X POST http://localhost:8000/auth/login \
+  -d '{
+    "username": "testuser",
+    "password": "password123"
+  }' \
+  -H "Content-Type: application/json"
+```
+
+#### `GET /auth/me` (Protected)
+Get current user info and permissions. Requires `Authorization: Bearer <session_id>` header.
+
+Example:
+```bash
+curl http://localhost:8000/auth/me \
+  -H "Authorization: Bearer <session_id>"
+```
+
+#### `POST /auth/logout` (Protected)
+Logout and invalidate session. Requires `Authorization: Bearer <session_id>` header.
+
+Example:
+```bash
+curl -X POST http://localhost:8000/auth/logout \
+  -H "Authorization: Bearer <session_id>"
+```
+
+#### `POST /auth/permissions/grant` (Protected)
+Grant permissions to a user for a resource. Request body:
+```json
+{
+  "target_user_id": 123,
+  "resource_type": "sfile",
+  "resource_id": 456,
+  "relationship": "editor"
+}
+```
+
+Relationship types: `owner`, `editor`, `viewer`
+
+#### `POST /auth/permissions/revoke` (Protected)
+Revoke permissions from a user. Request body:
+```json
+{
+  "target_user_id": 123,
+  "resource_type": "sfile",
+  "resource_id": 456,
+  "relationship": "editor"
+}
+```
+
+#### `GET /auth/permissions/{resource_type}` (Protected)
+View permissions for all resources of a type.
+
+#### `GET /auth/permissions/{resource_type}/{resource_id}` (Protected)
+View permissions for a specific resource.
 
 ### WebSocket Real-time Events
 
@@ -65,9 +161,10 @@ ws.onmessage = (event) => console.log(JSON.parse(event.data));
 ```
 
 ## TODO
-- AUTH????????? (kinda and ReBAC)
+~~- AUTH????????? (kinda and ReBAC)
 - tie each websocket connection to a user id (or not, depending on my next point)
-- default create a public folder where all files are available to everyone, even unauthenticated users (useful for sharing stuff). 
+- default create a public folder where all files are available to everyone, even unauthenticated users (useful for sharing stuff). ~~
+- Well the test config is kinda useless ngl, make it useful or remove it
 - for each [file] uploaded, store a [file].meta that contains all the names the media is aliased under. can be used to restore the database and easily download everything
 - Add multi upload
 - Make frontend handle the displaying of videos and images like medal

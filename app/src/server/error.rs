@@ -3,7 +3,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Serialize;
 use thiserror::Error;
-use tracing::error;
+use tracing::{error, warn};
 
 pub type ServerResult<T> = core::result::Result<T, ServerError>;
 
@@ -132,6 +132,8 @@ impl ServerError {
 
 impl IntoResponse for ServerError {
     fn into_response(self) -> Response {
+        // Warn about the error happening (maybe we want to see!)
+        warn!("Server error occurred: {:?}", self);
         let (status, error_response) = self.to_status_and_client_error();
         (status, Json(error_response)).into_response()
     }

@@ -21,7 +21,8 @@ pub async fn routes(controller: FileController, ws_controller: Option<WebSocketC
         .nest("/", files::routes(controller.clone()))
         .nest("/", auth::routes(server_state.auth_controller.clone()))
         .route("/ping", get(ping))
-        .route("/health", get(health_check));
+        .route("/health", get(health_check))
+        .layer(axum::Extension(server_state.auth_controller.clone()));
     
     // Add WebSocket routes if WebSocket controller is provided
     if let Some(ws_ctrl) = ws_controller {

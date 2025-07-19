@@ -30,7 +30,6 @@ pub fn routes(auth_controller: AuthController) -> Router {
     Router::new()
         .merge(public_routes)
         .merge(protected_routes)
-        .layer(Extension(auth_controller))
 }
 
 async fn register_handler(

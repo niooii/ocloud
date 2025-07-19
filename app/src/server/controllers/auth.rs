@@ -205,6 +205,7 @@ impl AuthController {
     }
 
     /// Build auth context for a user (load all their permissions)
+    /// TODO! seperate into multiple queuries?
     pub async fn build_auth_context(&self, user_id: i64) -> ServerResult<AuthContext> {
         let user = sqlx::query!(
             "SELECT username FROM users WHERE id = $1",

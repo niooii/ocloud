@@ -88,7 +88,10 @@ where T: YamlConfig {
                         exit(1);
                     }
                 },
-                _ => panic!("{e:?}"),
+                _ => {
+                    eprintln!("Configuration error: {e:?}");
+                    exit(1);
+                },
             }
         }
     }

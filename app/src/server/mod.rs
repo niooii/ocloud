@@ -10,12 +10,17 @@ use std::sync::Arc;
 use axum::{middleware, response::{IntoResponse, Response}, serve::serve, Json, Router};
 use error::ServerError;
 use controllers::{files::{FileController, FileControllerInner}, websocket::{WebSocketController, WebSocketControllerInner}, auth::AuthController};
+use uuid::Uuid;
+use dashmap::DashMap;
 
 #[derive(Clone)]
 pub struct ServerState {
     pub file_controller: FileController,
     pub ws_controller: WebSocketController,
     pub auth_controller: AuthController,
+    /// Maps user session IDs to WebSocket connection IDs for progress updates
+    /// Only authenticated users have sessions - anonymous users get direct broadcasts
+    pub session_to_ws: Arc<DashMap<Uuid, Uuid>>,
 }
                    
 use sqlx::{postgres::PgConnectOptions, PgPool};
@@ -57,35 +62,26 @@ pub async fn init() -> ServerResult<()> {
     }
 }
 
-pub async fn create_server(db_pool: PgPool) -> Router {
-    trace!("Creating WebSocket controller...");
+pub async fn create_server(db_pool: PgPool) -> (Router, ServerState) {
     let ws_controller = Arc::new(WebSocketControllerInner::new());
-    trace!("WebSocket controller created.");
 
-    trace!("Creating auth controller...");
     let auth_controller = AuthController::new(db_pool.clone());
-    trace!("Auth controller created.");
 
-    trace!("Creating file controller with WebSocket support...");
     let file_controller = Arc::new(FileControllerInner::new(db_pool, Arc::clone(&ws_controller)).await);
-    trace!("File controller created.");
 
-    trace!("Creating server state...");
     let server_state = ServerState {
         file_controller: file_controller.clone(),
         ws_controller: ws_controller.clone(),
         auth_controller: auth_controller.clone(),
+        session_to_ws: Arc::new(DashMap::new()),
     };
-    trace!("Server state created.");
 
-    trace!("Setting up routes...");
     let routes = Router::new()
-        .nest("", routes::routes(file_controller, Some(ws_controller), server_state).await)
+        .nest("", routes::routes(file_controller, Some(ws_controller), server_state.clone()).await)
         .layer(middleware::map_response(main_response_mapper))
         .layer(middleware::from_fn(web::middleware::trace_request));
-    trace!("Routes set up.");
 
-    routes
+    (routes, server_state)
 }
 
 pub async fn run(host: &str, port: u16, pg_connect_opts: PgConnectOptions) -> ServerResult<()> {
@@ -98,7 +94,7 @@ pub async fn run(host: &str, port: u16, pg_connect_opts: PgConnectOptions) -> Se
         .expect("Failed to run migrations.");
     trace!("Ran database migrations.");
 
-    let routes = create_server(db_pool).await;
+    let (routes, _server_state) = create_server(db_pool).await;
 
     trace!("Binding to {host}:{port}...");
     let listener = TcpListener::bind(

@@ -36,11 +36,13 @@ jobs:
     - name: Install sqlx-cli
       run: cargo install sqlx-cli --no-default-features --features native-tls,postgres
     - name: Run migrations
+      working-directory: app
       run: |
         sudo apt-get install libpq-dev -y
         PGPASSWORD=password psql -h localhost -U postgres -d postgres -c "CREATE DATABASE ocloud;"
         sqlx migrate run --database-url postgres://postgres:password@localhost/ocloud
     - name: Run tests
+      working-directory: app
       run: cargo test
 
   fmt:
@@ -53,6 +55,7 @@ jobs:
       with:
         components: rustfmt
     - name: Enforce formatting
+      working-directory: app
       run: cargo fmt --check
 
   clippy:
@@ -81,11 +84,13 @@ jobs:
     - name: Install sqlx-cli
       run: cargo install sqlx-cli --no-default-features --features native-tls,postgres
     - name: Run migrations
+      working-directory: app
       run: |
         sudo apt-get install libpq-dev -y
         PGPASSWORD=password psql -h localhost -U postgres -d postgres -c "CREATE DATABASE ocloud;"
         sqlx migrate run --database-url postgres://postgres:password@localhost/ocloud
     - name: Linting
+      working-directory: app
       run: cargo clippy -- -D warnings
 
   coverage:
@@ -113,11 +118,13 @@ jobs:
     - name: Install sqlx-cli
       run: cargo install sqlx-cli --no-default-features --features native-tls,postgres
     - name: Run migrations
+      working-directory: app
       run: |
         sudo apt-get install libpq-dev -y
         PGPASSWORD=password psql -h localhost -U postgres -d postgres -c "CREATE DATABASE ocloud;"
         sqlx migrate run --database-url postgres://postgres:password@localhost/ocloud
     - name: Generate code coverage
+      working-directory: app
       run: |
         cargo install cargo-tarpaulin
         cargo tarpaulin --verbose --workspace

@@ -1,21 +1,28 @@
 use std::{io::Write, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
-use axum::{body::Body, extract::{DefaultBodyLimit, Multipart, Path, State}, http::{header, HeaderValue}, response::Response, routing::{get, patch}, Json, Router};
+use axum::{body::Body, extract::{DefaultBodyLimit, Multipart, Path, State}, http::{header, HeaderValue}, response::Response, routing::{get, patch, delete}, Json, Router, Extension};
 use serde::Deserialize;
 use crate::{config::SETTINGS, server::models::files::SFile};
 use tokio::{fs::File, io::AsyncWriteExt};
 use sha2::{Digest, Sha256};
 use tokio::fs;
-use tracing::{error, trace};
+use tracing::error;
 
-use crate::server::{controllers::files::FileController, models::files::{FileUploadInfo, Media, VirtualPath}};
+use crate::server::{controllers::files::FileController, models::files::{FileUploadInfo, Media, VirtualPath}, models::auth::{AuthContext, Permission}};
 use crate::server::error::{ServerError, ServerResult};
+use crate::server::web::middleware::{require_auth, optional_auth};
+use sqlx::query;
 
 pub fn routes(controller: FileController) -> Router {
-    Router::new()
+    // Public routes (no authentication required - handlers check if files are public)
+    let public_routes = Router::new()
+        .route("/files/*path", get(get_file_or_list_dir))
+        .layer(axum::middleware::from_fn(optional_auth));
+    
+    // Protected routes (require authentication)
+    let protected_routes = Router::new()
         .route(
             "/files/*path", 
-            get(get_file_or_list_dir)
-            .delete(delete_file)
+            delete(delete_file)
             .post(upload_or_mk_dirs)
             .layer(
                 if let Some(s) = SETTINGS.application.max_filesize {
@@ -28,6 +35,11 @@ pub fn routes(controller: FileController) -> Router {
             "/files", 
             patch(move_files)
         )
+        .layer(axum::middleware::from_fn(require_auth));
+    
+    Router::new()
+        .merge(public_routes)
+        .merge(protected_routes)
         .with_state(controller)
 }
 
@@ -38,17 +50,37 @@ pub struct MoveInfo {
 }
 
 pub async fn move_files(
+    Extension(auth_context): Extension<AuthContext>,
     State(files): State<FileController>,
-    Json(move_info): Json<MoveInfo>
+    Json(move_info): Json<MoveInfo>,
 ) -> ServerResult<Json<SFile>> {
+    // Check if user has permission to move the source file
+    let sfile = files.get_sfile(&move_info.from).await?;
+    
+    // First check if user is the owner (direct ownership via sfiles.user_id)
+    let is_owner = query!(
+        "SELECT user_id FROM sfiles WHERE id = $1",
+        sfile.id as i64
+    ).fetch_optional(files.db_pool()).await?
+    .map(|row| row.user_id == Some(auth_context.user_id))
+    .unwrap_or(false);
+    
+    // If not owner, check ReBAC permissions
+    if !is_owner && !auth_context.has_permission("sfile", Some(sfile.id as i64), Permission::ChangePermissions) {
+        return Err(ServerError::AuthorizationError {
+            message: "Only file owners can move files".to_string(),
+        });
+    }
+    
     files.mv(&move_info.from, &move_info.to).await
     .map(Json)
 }
 
 pub async fn upload_or_mk_dirs(
+    Extension(auth_context): Extension<AuthContext>,
     State(files): State<FileController>, 
     Path(mut path): Path<VirtualPath>,
-    multipart: Option<Multipart>
+    multipart: Option<Multipart>,
 ) -> ServerResult<Json<Vec<SFile>>> {
     path.err_if_file()?;
     // If it was multipart
@@ -77,15 +109,15 @@ pub async fn upload_or_mk_dirs(
             let temp_path: PathBuf = save_dir.join(
                 format!("./tmp_{now}_{name}")
             );
-            println!("1");
+            
             let mut file: File = File::create(&temp_path).await
                 .map_err(|e| ServerError::IOError { message: e.to_string() } )?;
             // i64 type because postgres doesnt support unsigned gg
-println!("2");
+
             let mut file_size: i64 = 0;
             const PROGRESS_THRESHOLD: u64 = 1024 * 1024; // 1MB
             let mut last_progress_report: u64 = 0;
-            println!("3");
+            
             while let Some(chunk) = field.chunk().await
                 .map_err(|e| ServerError::AxumError { message: format!("Chunk error: {}", e.body_text()) })? {
                 
@@ -112,6 +144,7 @@ println!("2");
                 file_size,
                 file_hash: file_hash.clone(),
                 vpath: path,
+                user_id: auth_context.user_id,
             };
             
             // Ensure the file handle is dropped before doing anything
@@ -145,14 +178,44 @@ println!("2");
     }
 
     // either no content in multipart or not multipart. thats okay, just make the directory.
-    files.make_all_dirs(&path, None).await.map(Json)
+    files.make_all_dirs(&path, auth_context.user_id, None).await.map(Json)
 }
 
 pub async fn get_file_or_list_dir(
+    auth_context: Option<Extension<AuthContext>>,
     Path(path): Path<VirtualPath>,
     State(files): State<FileController>,
 ) -> ServerResult<Response> {
     if !path.is_dir() {
+        // Check if user has read permission for this file
+        let sfile = files.get_sfile(&path).await?;
+        
+        // Check if file is public - if so, allow access regardless of authentication
+        if !sfile.is_public {
+            // File is private, require authentication and permission checking
+            let auth_context = match auth_context {
+                Some(Extension(ctx)) => ctx,
+                None => return Err(ServerError::AuthenticationError {
+                    message: "Authentication required to access private files".to_string(),
+                }),
+            };
+            
+            // First check if user is the owner (direct ownership via sfiles.user_id)
+            let is_owner = query!(
+                "SELECT user_id FROM sfiles WHERE id = $1",
+                sfile.id as i64
+            ).fetch_optional(files.db_pool()).await?
+            .map(|row| row.user_id == Some(auth_context.user_id))
+            .unwrap_or(false);
+            
+            // If not owner, check ReBAC permissions
+            if !is_owner && !auth_context.has_permission("sfile", Some(sfile.id as i64), Permission::Read) {
+                return Err(ServerError::AuthorizationError {
+                    message: "You don't have permission to access this file".to_string(),
+                });
+            }
+        }
+        
         let media: Media = files.get_media(&path).await?;
 
         let stream = media.reader_stream().await?;
@@ -185,7 +248,38 @@ pub async fn get_file_or_list_dir(
 
         Ok(res)
     } else {
-        let list = files.list_dir(&path).await?
+        // For directory listing, check if user has read permission for the directory
+        let sfile = files.get_sfile(&path).await?;
+        
+        // Extract user_id first before any borrowing issues
+        let user_id = auth_context.as_ref().map(|Extension(ctx)| ctx.user_id);
+        
+        // Check if directory is public - if so, allow access regardless of authentication
+        if !sfile.is_public {
+            // Directory is private, require authentication and permission checking
+            let auth_context = match auth_context {
+                Some(Extension(ctx)) => ctx,
+                None => return Err(ServerError::AuthenticationError {
+                    message: "Authentication required to access private directories".to_string(),
+                }),
+            };
+            
+            // First check if user is the owner (direct ownership via sfiles.user_id)
+            let is_owner = query!(
+                "SELECT user_id FROM sfiles WHERE id = $1",
+                sfile.id as i64
+            ).fetch_optional(files.db_pool()).await?
+            .map(|row| row.user_id == Some(auth_context.user_id))
+            .unwrap_or(false);
+            
+            // If not owner, check ReBAC permissions
+            if !is_owner && !auth_context.has_permission("sfile", Some(sfile.id as i64), Permission::Read) {
+                return Err(ServerError::AuthorizationError {
+                    message: "You don't have permission to access this directory".to_string(),
+                });
+            }
+        }
+        let list = files.list_dir(&path, user_id).await?
             .ok_or(ServerError::PathDoesntExist)?;
         Ok(Response::new(Body::from(serde_json::to_string(&list)?)))
     }
@@ -193,9 +287,29 @@ pub async fn get_file_or_list_dir(
 }
 
 pub async fn delete_file(
+    Extension(auth_context): Extension<AuthContext>,
     State(files): State<FileController>,
     Path(path): Path<VirtualPath>,
 ) -> ServerResult<()> {
+    // Check if user has delete permission for this file
+    let sfile = files.get_sfile(&path).await?;
+    
+    // Delete requires authentication regardless of public status - only owners can delete
+    // First check if user is the owner (direct ownership via sfiles.user_id)
+    let is_owner = query!(
+        "SELECT user_id FROM sfiles WHERE id = $1",
+        sfile.id as i64
+    ).fetch_optional(files.db_pool()).await?
+    .map(|row| row.user_id == Some(auth_context.user_id))
+    .unwrap_or(false);
+    
+    // If not owner, check ReBAC permissions (only Owner relationship has Delete permission)
+    if !is_owner && !auth_context.has_permission("sfile", Some(sfile.id as i64), Permission::Delete) {
+        return Err(ServerError::AuthorizationError {
+            message: "Only file owners can delete files".to_string(),
+        });
+    }
+    
     files.delete_sfile(&path).await?;
     
     Ok(())

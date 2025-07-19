@@ -5,9 +5,10 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
+use crate::common::TEST_APP;
+
 #[tokio::test]
 async fn user_registration_works() {
-    let app = TestApp::spawn().await;
     let client = Client::new();
 
     let user_data = json!({
@@ -17,7 +18,7 @@ async fn user_registration_works() {
     });
 
     let response = client
-        .post(format!("{}/auth/register", &app.address))
+        .post(format!("{}/auth/register", &TEST_APP.address))
         .json(&user_data)
         .send()
         .await
@@ -32,12 +33,11 @@ async fn user_registration_works() {
     assert!(body["user"]["created_at"].is_string());
     assert_eq!(body["message"], "User registered successfully");
 
-    app.cleanup().await;
+
 }
 
 #[tokio::test]
 async fn duplicate_registration_fails() {
-    let app = TestApp::spawn().await;
     let client = Client::new();
 
     let user_data = json!({
@@ -48,7 +48,7 @@ async fn duplicate_registration_fails() {
 
     // First registration should succeed
     let response = client
-        .post(format!("{}/auth/register", &app.address))
+        .post(format!("{}/auth/register", &TEST_APP.address))
         .json(&user_data)
         .send()
         .await
@@ -57,7 +57,7 @@ async fn duplicate_registration_fails() {
 
     // Second registration should fail
     let response = client
-        .post(format!("{}/auth/register", &app.address))
+        .post(format!("{}/auth/register", &TEST_APP.address))
         .json(&user_data)
         .send()
         .await
@@ -67,12 +67,11 @@ async fn duplicate_registration_fails() {
     let body: Value = response.json().await.expect("Failed to parse response");
     assert_eq!(body["error"], "Validation failed");
 
-    app.cleanup().await;
+
 }
 
 #[tokio::test]
 async fn user_login_works() {
-    let app = TestApp::spawn().await;
     let client = Client::new();
 
     // First register a user
@@ -83,7 +82,7 @@ async fn user_login_works() {
     });
 
     client
-        .post(format!("{}/auth/register", &app.address))
+        .post(format!("{}/auth/register", &TEST_APP.address))
         .json(&user_data)
         .send()
         .await
@@ -96,7 +95,7 @@ async fn user_login_works() {
     });
 
     let response = client
-        .post(format!("{}/auth/login", &app.address))
+        .post(format!("{}/auth/login", &TEST_APP.address))
         .json(&login_data)
         .send()
         .await
@@ -115,12 +114,11 @@ async fn user_login_works() {
     let session_id = body["session_id"].as_str().unwrap();
     assert!(Uuid::parse_str(session_id).is_ok());
 
-    app.cleanup().await;
+
 }
 
 #[tokio::test]
 async fn login_with_email_works() {
-    let app = TestApp::spawn().await;
     let client = Client::new();
 
     // Register a user
@@ -131,7 +129,7 @@ async fn login_with_email_works() {
     });
 
     client
-        .post(format!("{}/auth/register", &app.address))
+        .post(format!("{}/auth/register", &TEST_APP.address))
         .json(&user_data)
         .send()
         .await
@@ -144,7 +142,7 @@ async fn login_with_email_works() {
     });
 
     let response = client
-        .post(format!("{}/auth/login", &app.address))
+        .post(format!("{}/auth/login", &TEST_APP.address))
         .json(&login_data)
         .send()
         .await
@@ -156,12 +154,11 @@ async fn login_with_email_works() {
     assert_eq!(body["user"]["username"], "testuser");
     assert_eq!(body["user"]["email"], "test@example.com");
 
-    app.cleanup().await;
+
 }
 
 #[tokio::test]
 async fn invalid_login_fails() {
-    let app = TestApp::spawn().await;
     let client = Client::new();
 
     // Register a user
@@ -172,7 +169,7 @@ async fn invalid_login_fails() {
     });
 
     client
-        .post(format!("{}/auth/register", &app.address))
+        .post(format!("{}/auth/register", &TEST_APP.address))
         .json(&user_data)
         .send()
         .await
@@ -185,7 +182,7 @@ async fn invalid_login_fails() {
     });
 
     let response = client
-        .post(format!("{}/auth/login", &app.address))
+        .post(format!("{}/auth/login", &TEST_APP.address))
         .json(&login_data)
         .send()
         .await
@@ -196,12 +193,11 @@ async fn invalid_login_fails() {
     let body: Value = response.json().await.expect("Failed to parse response");
     assert_eq!(body["error"], "Authentication failed");
 
-    app.cleanup().await;
+
 }
 
 #[tokio::test]
 async fn nonexistent_user_login_fails() {
-    let app = TestApp::spawn().await;
     let client = Client::new();
 
     let login_data = json!({
@@ -210,7 +206,7 @@ async fn nonexistent_user_login_fails() {
     });
 
     let response = client
-        .post(format!("{}/auth/login", &app.address))
+        .post(format!("{}/auth/login", &TEST_APP.address))
         .json(&login_data)
         .send()
         .await
@@ -221,28 +217,26 @@ async fn nonexistent_user_login_fails() {
     let body: Value = response.json().await.expect("Failed to parse response");
     assert_eq!(body["error"], "Authentication failed");
 
-    app.cleanup().await;
+
 }
 
 #[tokio::test]
 async fn me_endpoint_requires_authentication() {
-    let app = TestApp::spawn().await;
     let client = Client::new();
 
     let response = client
-        .get(format!("{}/auth/me", &app.address))
+        .get(format!("{}/auth/me", &TEST_APP.address))
         .send()
         .await
         .expect("Failed to execute request");
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
-    app.cleanup().await;
+
 }
 
 #[tokio::test]
 async fn me_endpoint_works_with_valid_session() {
-    let app = TestApp::spawn().await;
     let client = Client::new();
 
     // Register and login
@@ -253,7 +247,7 @@ async fn me_endpoint_works_with_valid_session() {
     });
 
     client
-        .post(format!("{}/auth/register", &app.address))
+        .post(format!("{}/auth/register", &TEST_APP.address))
         .json(&user_data)
         .send()
         .await
@@ -265,7 +259,7 @@ async fn me_endpoint_works_with_valid_session() {
     });
 
     let login_response = client
-        .post(format!("{}/auth/login", &app.address))
+        .post(format!("{}/auth/login", &TEST_APP.address))
         .json(&login_data)
         .send()
         .await
@@ -276,7 +270,7 @@ async fn me_endpoint_works_with_valid_session() {
 
     // Use session to access /me
     let response = client
-        .get(format!("{}/auth/me", &app.address))
+        .get(format!("{}/auth/me", &TEST_APP.address))
         .header("Authorization", format!("Bearer {session_id}"))
         .send()
         .await
@@ -289,12 +283,11 @@ async fn me_endpoint_works_with_valid_session() {
     assert_eq!(body["username"], "testuser");
     assert!(body["permissions"].is_number());
 
-    app.cleanup().await;
+
 }
 
 #[tokio::test]
 async fn logout_works() {
-    let app = TestApp::spawn().await;
     let client = Client::new();
 
     // Register and login
@@ -305,7 +298,7 @@ async fn logout_works() {
     });
 
     client
-        .post(format!("{}/auth/register", &app.address))
+        .post(format!("{}/auth/register", &TEST_APP.address))
         .json(&user_data)
         .send()
         .await
@@ -317,7 +310,7 @@ async fn logout_works() {
     });
 
     let login_response = client
-        .post(format!("{}/auth/login", &app.address))
+        .post(format!("{}/auth/login", &TEST_APP.address))
         .json(&login_data)
         .send()
         .await
@@ -328,7 +321,7 @@ async fn logout_works() {
 
     // Logout
     let response = client
-        .post(format!("{}/auth/logout", &app.address))
+        .post(format!("{}/auth/logout", &TEST_APP.address))
         .header("Authorization", format!("Bearer {session_id}"))
         .send()
         .await
@@ -341,7 +334,7 @@ async fn logout_works() {
 
     // Try to use the session again - should fail
     let response = client
-        .get(format!("{}/auth/me", &app.address))
+        .get(format!("{}/auth/me", &TEST_APP.address))
         .header("Authorization", format!("Bearer {session_id}"))
         .send()
         .await
@@ -349,16 +342,15 @@ async fn logout_works() {
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
-    app.cleanup().await;
+
 }
 
 #[tokio::test]
 async fn invalid_bearer_token_fails() {
-    let app = TestApp::spawn().await;
     let client = Client::new();
 
     let response = client
-        .get(format!("{}/auth/me", &app.address))
+        .get(format!("{}/auth/me", &TEST_APP.address))
         .header("Authorization", "Bearer invalid-token")
         .send()
         .await
@@ -366,32 +358,30 @@ async fn invalid_bearer_token_fails() {
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
-    app.cleanup().await;
+
 }
 
 #[tokio::test]
 async fn missing_authorization_header_fails() {
-    let app = TestApp::spawn().await;
     let client = Client::new();
 
     let response = client
-        .get(format!("{}/auth/me", &app.address))
+        .get(format!("{}/auth/me", &TEST_APP.address))
         .send()
         .await
         .expect("Failed to execute request");
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
-    app.cleanup().await;
+
 }
 
 #[tokio::test]
 async fn malformed_authorization_header_fails() {
-    let app = TestApp::spawn().await;
     let client = Client::new();
 
     let response = client
-        .get(format!("{}/auth/me", &app.address))
+        .get(format!("{}/auth/me", &TEST_APP.address))
         .header("Authorization", "InvalidFormat")
         .send()
         .await
@@ -399,6 +389,6 @@ async fn malformed_authorization_header_fails() {
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
-    app.cleanup().await;
+
 }
 

@@ -4,6 +4,8 @@ use common::TestApp;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 
+use crate::common::TEST_APP;
+
 async fn register_and_login(app: &TestApp, username: &str, email: &str, password: &str) -> String {
     let client = Client::new();
 
@@ -15,7 +17,7 @@ async fn register_and_login(app: &TestApp, username: &str, email: &str, password
     });
 
     client
-        .post(format!("{}/auth/register", &app.address))
+        .post(format!("{}/auth/register", &TEST_APP.address))
         .json(&user_data)
         .send()
         .await
@@ -28,7 +30,7 @@ async fn register_and_login(app: &TestApp, username: &str, email: &str, password
     });
 
     let login_response = client
-        .post(format!("{}/auth/login", &app.address))
+        .post(format!("{}/auth/login", &TEST_APP.address))
         .json(&login_data)
         .send()
         .await
@@ -41,14 +43,13 @@ async fn register_and_login(app: &TestApp, username: &str, email: &str, password
 
 #[tokio::test]
 async fn cannot_view_permissions_without_access() {
-    let app = TestApp::spawn().await;
     let client = Client::new();
 
-    let user_session = register_and_login(&app, "testuser", "test@example.com", "password123").await;
+    let user_session = register_and_login(&TEST_APP, "testuser", "test@example.com", "password123").await;
 
     // Try to view permissions for a resource the user has no access to
     let response = client
-        .get(format!("{}/auth/permissions/sfile/999", &app.address))
+        .get(format!("{}/auth/permissions/sfile/999", &TEST_APP.address))
         .header("Authorization", format!("Bearer {user_session}"))
         .send()
         .await
@@ -59,5 +60,5 @@ async fn cannot_view_permissions_without_access() {
     let body: Value = response.json().await.expect("Failed to parse response");
     assert_eq!(body["error"], "Access denied");
 
-    app.cleanup().await;
+
 }
