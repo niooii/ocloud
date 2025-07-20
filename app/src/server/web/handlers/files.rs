@@ -21,7 +21,7 @@ use tracing::error;
 use crate::server::error::{ServerError, ServerResult};
 use crate::server::web::middleware::{optional_auth, require_auth};
 use crate::server::{
-    controllers::files::{FileController, FileVisibility},
+    controllers::files::FileController,
     models::auth::{AuthContext, Permission},
     models::files::{FileUploadInfo, Media, VirtualPath},
 };
@@ -63,7 +63,7 @@ pub struct MoveInfo {
 #[derive(Deserialize)]
 pub struct VisibilityInfo {
     pub path: VirtualPath,
-    pub visibility: String, // "public" or "private"
+    pub public: bool, // true for public, false for private
 }
 
 #[derive(Deserialize)]
@@ -441,20 +441,8 @@ pub async fn change_file_visibility(
         });
     }
 
-    // Parse visibility string
-    // TODO! unnecessary and unproper
-    let visibility = match visibility_info.visibility.as_str() {
-        "public" => FileVisibility::Public,
-        "private" => FileVisibility::Private,
-        _ => {
-            return Err(ServerError::ValidationError {
-                message: "Visibility must be 'public' or 'private'".to_string(),
-            })
-        }
-    };
-
     let updated = files
-        .set_file_visibility(&visibility_info.path, visibility, auth_context.user_id)
+        .set_file_visibility(&visibility_info.path, visibility_info.public, auth_context.user_id)
         .await?;
 
     Ok(Json(updated))

@@ -24,31 +24,6 @@ use crate::{
 use crate::server::models::auth::RelationshipType;
 use crate::server::models::files::{FileUploadInfo, Media, SFile, VirtualPath};
 
-/// File visibility status
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FileVisibility {
-    Private,
-    Public,
-}
-
-impl From<bool> for FileVisibility {
-    fn from(is_public: bool) -> Self {
-        if is_public {
-            FileVisibility::Public
-        } else {
-            FileVisibility::Private
-        }
-    }
-}
-
-impl From<FileVisibility> for bool {
-    fn from(visibility: FileVisibility) -> Self {
-        match visibility {
-            FileVisibility::Public => true,
-            FileVisibility::Private => false,
-        }
-    }
-}
 
 /// File permission operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -779,16 +754,13 @@ impl FileControllerInner {
     }
 
     /// Set the visibility status of a file or directory, returns the updated file
-    /// TODO! this will eventually handle setting permissions as well. just make it Option<bool>
-    /// for visibility, vice versa
     pub async fn set_file_visibility(
         &self,
         vpath: &VirtualPath,
-        visibility: FileVisibility,
+        is_public: bool,
         user_id: i64,
     ) -> ServerResult<SFile> {
         let sfile_id = self.resolve_path_to_sfile_id(vpath, user_id).await?;
-        let is_public: bool = visibility.into();
 
         let sfile = query_as!(
             SFileRow,
@@ -808,23 +780,22 @@ impl FileControllerInner {
         &self,
         vpath: &VirtualPath,
         user_id: i64,
-    ) -> ServerResult<FileVisibility> {
+    ) -> ServerResult<bool> {
         let sfile_id = self.resolve_path_to_sfile_id(vpath, user_id).await?;
 
         let result = query!("SELECT is_public FROM sfiles WHERE id = $1", sfile_id)
             .fetch_one(&self.db_pool)
             .await?;
 
-        Ok(FileVisibility::from(result.is_public))
+        Ok(result.is_public)
     }
 
     /// Set file visibility by filename (helper for tests)
     pub async fn set_file_visibility_by_name(
         &self,
         filename: &str,
-        visibility: FileVisibility,
+        is_public: bool,
     ) -> ServerResult<()> {
-        let is_public: bool = visibility.into();
 
         query!(
             "UPDATE sfiles SET is_public = $1 WHERE id = (
@@ -845,9 +816,8 @@ impl FileControllerInner {
     pub async fn set_directory_visibility_by_name(
         &self,
         dirname: &str,
-        visibility: FileVisibility,
+        is_public: bool,
     ) -> ServerResult<()> {
-        let is_public: bool = visibility.into();
 
         query!(
             "UPDATE sfiles SET is_public = $1 WHERE id = (

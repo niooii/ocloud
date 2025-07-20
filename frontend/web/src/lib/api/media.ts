@@ -9,7 +9,10 @@ interface SFileRaw {
     created_at: string,
     modified_at: string,
     // Either the name of the directory or the file
-    top_level_name: string
+    top_level_name: string,
+    // Whether file/folder is publicly accessible
+    is_public: boolean,
+    user_id?: number
 }
 
 export interface SFile {
@@ -20,7 +23,10 @@ export interface SFile {
     createdAt: Date,
     modifiedAt: Date,
     // Either the name of the directory or the file
-    topLevelName: string
+    topLevelName: string,
+    // Whether file/folder is publicly accessible
+    isPublic: boolean,
+    userId?: number
 }
 
 interface CacheEntry {
@@ -174,7 +180,9 @@ function sfile_from_raw(raw: SFileRaw): SFile {
         modifiedAt: new Date(raw.modified_at),
         // Either the name of the directory or the file
         topLevelName: raw.top_level_name,
-        referencesMediaId: raw.media_id
+        referencesMediaId: raw.media_id,
+        isPublic: raw.is_public,
+        userId: raw.user_id
     };
 }
 
@@ -185,10 +193,11 @@ export class MediaApi extends BaseClient {
         return this.cache.init();
     }
 
-    async listDir(dir: Path): Promise<SFile[] | null> {
+    async listDir(dir: Path, targetUserId?: number): Promise<SFile[] | null> {
         const _dir = dir.asDir();
+        const queryParams = targetUserId ? `?u=${targetUserId}` : '';
         const raw = await this.request<SFileRaw[]>(
-            `/files/${_dir.toString()}`,
+            `/files/${_dir.toString()}${queryParams}`,
             {
                 method: "GET"
             }
@@ -200,7 +209,7 @@ export class MediaApi extends BaseClient {
         return raw.map(sfile_from_raw);
     }
 
-    async getMedia(file: SFile, useCache: boolean = true): Promise<Blob | null> {
+    async getMedia(file: SFile, useCache: boolean = true, targetUserId?: number): Promise<Blob | null> {
         const _file = file.fullPath.asFile();
         if (!file.referencesMediaId)
             return null;
@@ -220,8 +229,9 @@ export class MediaApi extends BaseClient {
             console.log("found nothing in cache... :(");
         }
 
+        const queryParams = targetUserId ? `?u=${targetUserId}` : '';
         const blob = await this.requestBytes(
-            `/files/${_file.toString()}`,
+            `/files/${_file.toString()}${queryParams}`,
             {
                 method: "GET"
             }
@@ -270,18 +280,52 @@ export class MediaApi extends BaseClient {
         return raw.map(sfile_from_raw);
     }
 
-    async moveFile(sourceFile: SFile, targetDir: Path): Promise<boolean> {
+    async moveFile(sourceFile: SFile, targetDir: Path): Promise<SFile | null> {
         const fromPath = sourceFile.fullPath.toString();
         let toPath = targetDir.asDir().toString() + sourceFile.topLevelName;
         if (sourceFile.isDir) toPath += "/";
-        const res = await fetch(`${this.serverUrl}/files`, {
-            method: "PATCH",
-            headers: {
-                "Content-Type": "application/json",
-                ...(localStorage.getItem('OCLOUD_AUTH') ? { "Authorization": `Bearer ${localStorage.getItem('OCLOUD_AUTH')}` } : {})
-            },
-            body: JSON.stringify({ from: fromPath, to: toPath })
-        });
-        return res.ok;
+        
+        const moved = await this.request<SFileRaw>(
+            `/files`,
+            {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ from: fromPath, to: toPath })
+            }
+        );
+        
+        if (!moved) return null;
+        return sfile_from_raw(moved);
+    }
+
+    async changeFileVisibility(file: SFile, isPublic: boolean): Promise<SFile | null> {
+        const updated = await this.request<SFileRaw>(
+            `/files`,
+            {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ 
+                    path: file.fullPath.toString(), 
+                    public: isPublic 
+                })
+            }
+        );
+
+        if (!updated) return null;
+        return sfile_from_raw(updated);
+    }
+
+    async deleteFile(file: SFile): Promise<boolean> {
+        const response = await this.request(
+            `/files/${file.fullPath.toString()}`,
+            {
+                method: "DELETE"
+            }
+        );
+        return response !== null;
     }
 }

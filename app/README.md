@@ -154,10 +154,10 @@ View permissions for a specific resource.
 Connect to receive real-time file system events and upload progress.
 
 Events (JSON):
-- `FileCreated` - File/directory created: `{"type": "FileCreated", "data": {"path": "/file.txt", "file_id": 123, "is_dir": false}}`
-- `FileDeleted` - File deleted: `{"type": "FileDeleted", "data": {"path": "/file.txt", "file_id": 123}}`  
-- `FileMoved` - File moved/renamed: `{"type": "FileMoved", "data": {"from_path": "/old.txt", "to_path": "/new.txt", "file_id": 123}}`
-- `UploadProgress` - Upload progress: `{"type": "UploadProgress", "data": {"path": "/folder/", "file_name": "big.zip", "bytes_uploaded": 1024, "total_bytes": 2048, "progress_percent": 50.0}}`
+- `FileCreated` - File/directory created: `{"t": "FileCreated", "d": {"path": "/file.txt", "file_id": 123, "is_dir": false}}`
+- `FileDeleted` - File deleted: `{"t": "FileDeleted", "d": {"path": "/file.txt", "file_id": 123}}`  
+- `FileMoved` - File moved/renamed: `{"t": "FileMoved", "d": {"from_path": "/old.txt", "to_path": "/new.txt", "file_id": 123}}`
+- `UploadProgress` - Upload progress: `{"t": "UploadProgress", "d": {"path": "/folder/", "file_name": "big.zip", "bytes_uploaded": 1024, "total_bytes": 2048, "progress_percent": 50.0}}`
 
 Example: 
 ```javascript
