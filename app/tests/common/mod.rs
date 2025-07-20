@@ -179,3 +179,18 @@ async fn register_and_login(
     let user = login_response["user"].clone();
     (session_id, user)
 }
+
+/// Create multiple authenticated users for testing permissions
+/// Returns a vector of (client, user_info, user_id) tuples
+pub async fn create_multiple_users(db_pool: &PgPool, count: usize) -> Vec<(ApiClient, serde_json::Value, u64)> {
+    let mut users = Vec::new();
+    
+    for _ in 0..count {
+        let mut client = ApiClient::new_local(db_pool.clone()).await;
+        let user_info = authenticate_random(&mut client).await;
+        let user_id = user_info["id"].as_u64().expect("User should have valid ID");
+        users.push((client, user_info, user_id));
+    }
+    
+    users
+}

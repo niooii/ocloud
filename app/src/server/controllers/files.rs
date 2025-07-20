@@ -833,4 +833,141 @@ impl FileControllerInner {
 
         Ok(())
     }
+
+    /// Set permissions for a file/directory for a target user
+    pub async fn set_permissions_for(
+        &self,
+        vpath: &VirtualPath,
+        target_user_id: u64,
+        relationship: RelationshipType,
+        granter_user_id: i64,
+    ) -> ServerResult<()> {
+        let sfile_id = self.resolve_path_to_sfile_id(vpath, granter_user_id).await?;
+
+        // Check if granter has permission to change permissions on this file
+        // First check if user is the owner (direct ownership via sfiles.user_id)
+        let is_owner = query!("SELECT user_id FROM sfiles WHERE id = $1", sfile_id)
+            .fetch_optional(&self.db_pool)
+            .await?
+            .map(|row| row.user_id == Some(granter_user_id))
+            .unwrap_or(false);
+
+        // If not owner, check ReBAC permissions
+        if !is_owner {
+            // We need an auth context to check permissions
+            // For now, we'll just require the granter to be the owner
+            // This could be enhanced later to use AuthContext if needed
+            return Err(ServerError::AuthorizationError {
+                message: "Only file owners can grant permissions".to_string(),
+            });
+        }
+
+        // Find or create resource entry for this file
+        let resource_id = {
+            // Try to find existing resource
+            if let Some(resource) = query!(
+                "SELECT id FROM resources WHERE resource_type = $1 AND resource_id = $2",
+                "sfile",
+                sfile_id
+            )
+            .fetch_optional(&self.db_pool)
+            .await? {
+                resource.id
+            } else {
+                // Create new resource
+                query!(
+                    r"INSERT INTO resources (resource_type, resource_id) 
+                    VALUES ($1, $2) 
+                    RETURNING id",
+                    "sfile",
+                    sfile_id
+                )
+                .fetch_one(&self.db_pool)
+                .await?
+                .id
+            }
+        };
+
+        // Check if relationship already exists
+        let existing = query!(
+            "SELECT id FROM user_resource_relationships 
+             WHERE user_id = $1 AND resource_id = $2 AND relationship = $3",
+            target_user_id as i64,
+            resource_id,
+            relationship as RelationshipType
+        )
+        .fetch_optional(&self.db_pool)
+        .await?;
+
+        if existing.is_some() {
+            return Err(ServerError::ValidationError {
+                message: "Permission already exists for this user".to_string(),
+            });
+        }
+
+        // Grant permission
+        query!(
+            r"INSERT INTO user_resource_relationships (user_id, resource_id, relationship, granted_by) 
+            VALUES ($1, $2, $3, $4)",
+            target_user_id as i64,
+            resource_id,
+            relationship as RelationshipType,
+            granter_user_id
+        ).execute(&self.db_pool).await?;
+
+        Ok(())
+    }
+
+    /// Revoke permissions for a file/directory for a target user
+    pub async fn revoke_permissions_for(
+        &self,
+        vpath: &VirtualPath,
+        target_user_id: u64,
+        relationship: RelationshipType,
+        granter_user_id: i64,
+    ) -> ServerResult<()> {
+        let sfile_id = self.resolve_path_to_sfile_id(vpath, granter_user_id).await?;
+
+        // Check if granter has permission to change permissions on this file
+        let is_owner = query!("SELECT user_id FROM sfiles WHERE id = $1", sfile_id)
+            .fetch_optional(&self.db_pool)
+            .await?
+            .map(|row| row.user_id == Some(granter_user_id))
+            .unwrap_or(false);
+
+        if !is_owner {
+            return Err(ServerError::AuthorizationError {
+                message: "Only file owners can revoke permissions".to_string(),
+            });
+        }
+
+        // Find resource entry for this file
+        let resource = query!(
+            "SELECT r.id FROM resources r WHERE r.resource_type = $1 AND r.resource_id = $2",
+            "sfile",
+            sfile_id
+        )
+        .fetch_optional(&self.db_pool)
+        .await?
+        .ok_or_else(|| ServerError::ValidationError {
+            message: "No permissions found for this file".to_string(),
+        })?;
+
+        // Revoke permission
+        let rows_affected = query!(
+            "DELETE FROM user_resource_relationships 
+             WHERE user_id = $1 AND resource_id = $2 AND relationship = $3",
+            target_user_id as i64,
+            resource.id,
+            relationship as RelationshipType
+        ).execute(&self.db_pool).await?.rows_affected();
+
+        if rows_affected == 0 {
+            return Err(ServerError::ValidationError {
+                message: "Permission not found for this user".to_string(),
+            });
+        }
+
+        Ok(())
+    }
 }

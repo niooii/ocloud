@@ -45,6 +45,8 @@ pub enum RelationshipType {
     Owner,
     Editor,
     Viewer,
+    // TODO! this isn't really implemented or done anything with anywhere
+    None
 }
 
 impl RelationshipType {
@@ -68,6 +70,7 @@ impl RelationshipType {
             // Viewer permissions
             (RelationshipType::Viewer, Permission::Read) => true,
             (RelationshipType::Viewer, _) => false,
+            (RelationshipType::None, _) => false
         }
     }
 
@@ -97,6 +100,13 @@ pub enum Permission {
     Delete,
     Share,
     ChangePermissions,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PermissionAction {
+    Grant,
+    Revoke,
 }
 
 #[derive(Debug, Clone, FromRow)]

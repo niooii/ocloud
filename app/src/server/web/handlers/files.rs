@@ -22,7 +22,7 @@ use crate::server::error::{ServerError, ServerResult};
 use crate::server::web::middleware::{optional_auth, require_auth};
 use crate::server::{
     controllers::files::FileController,
-    models::auth::{AuthContext, Permission},
+    models::auth::{AuthContext, Permission, RelationshipType},
     models::files::{FileUploadInfo, Media, VirtualPath},
 };
 use sqlx::query;
@@ -45,7 +45,7 @@ pub fn routes(controller: FileController) -> Router {
                 },
             ),
         )
-        .route("/files", put(move_files).patch(change_file_visibility))
+        .route("/files", put(move_files).patch(set_permissions_and_visibility))
         .layer(axum::middleware::from_fn(require_auth));
 
     Router::new()
@@ -64,6 +64,20 @@ pub struct MoveInfo {
 pub struct VisibilityInfo {
     pub path: VirtualPath,
     pub public: bool, // true for public, false for private
+}
+
+#[derive(Deserialize)]
+pub struct PermissionOperation {
+    pub target_user_id: u64,
+    pub relationship: RelationshipType,
+    pub action: String, // "grant" or "revoke"
+}
+
+#[derive(Deserialize)]
+pub struct FilePermissionRequest {
+    pub path: VirtualPath,
+    pub public: Option<bool>, // Optional - true for public, false for private, exclude to not change
+    pub permissions: Option<PermissionOperation>, // Optional - permissions object, exclude to not change permissions
 }
 
 #[derive(Deserialize)]
@@ -411,14 +425,14 @@ pub async fn delete_file(
     Ok(())
 }
 
-pub async fn change_file_visibility(
+pub async fn set_permissions_and_visibility(
     Extension(auth_context): Extension<AuthContext>,
     State(files): State<FileController>,
-    Json(visibility_info): Json<VisibilityInfo>,
+    Json(request): Json<FilePermissionRequest>,
 ) -> ServerResult<Json<SFile>> {
-    // Check if user has permission to change visibility
+    // Get the file first to verify it exists and check permissions
     let sfile = files
-        .get_sfile(&visibility_info.path, auth_context.user_id)
+        .get_sfile(&request.path, auth_context.user_id)
         .await?;
 
     // First check if user is the owner (direct ownership via sfiles.user_id)
@@ -437,13 +451,73 @@ pub async fn change_file_visibility(
         )
     {
         return Err(ServerError::AuthorizationError {
-            message: "Only file owners can change file visibility".to_string(),
+            message: "Only file owners can change file settings".to_string(),
         });
     }
 
-    let updated = files
-        .set_file_visibility(&visibility_info.path, visibility_info.public, auth_context.user_id)
-        .await?;
+    // Handle visibility change if provided
+    let mut updated_sfile = sfile;
+    if let Some(public) = request.public {
+        updated_sfile = files
+            .set_file_visibility(&request.path, public, auth_context.user_id)
+            .await?;
+    }
 
-    Ok(Json(updated))
+    // Handle permissions change if provided
+    if let Some(perm_op) = request.permissions {
+        match perm_op.action.as_str() {
+            "grant" => {
+                files
+                    .set_permissions_for(
+                        &request.path,
+                        perm_op.target_user_id,
+                        perm_op.relationship,
+                        auth_context.user_id,
+                    )
+                    .await?;
+            }
+            "revoke" => {
+                files
+                    .revoke_permissions_for(
+                        &request.path,
+                        perm_op.target_user_id,
+                        perm_op.relationship,
+                        auth_context.user_id,
+                    )
+                    .await?;
+            }
+            _ => {
+                return Err(ServerError::ValidationError {
+                    message: "Permission action must be 'grant' or 'revoke'".to_string(),
+                });
+            }
+        }
+        // Refetch the file to get updated information
+        updated_sfile = files
+            .get_sfile(&request.path, auth_context.user_id)
+            .await?;
+    }
+
+    Ok(Json(updated_sfile))
+}
+
+// Keep the old function for backward compatibility if needed
+pub async fn change_file_visibility(
+    Extension(auth_context): Extension<AuthContext>,
+    State(files): State<FileController>,
+    Json(visibility_info): Json<VisibilityInfo>,
+) -> ServerResult<Json<SFile>> {
+    // Convert to unified request and call the new handler
+    let unified_request = FilePermissionRequest {
+        path: visibility_info.path,
+        public: Some(visibility_info.public),
+        permissions: None,
+    };
+    
+    set_permissions_and_visibility(
+        Extension(auth_context),
+        State(files),
+        Json(unified_request),
+    )
+    .await
 }

@@ -72,7 +72,23 @@ pub struct MoveFileRequest {
 #[derive(Debug, Serialize)]
 pub struct ChangeVisibilityRequest {
     pub path: String,
-    pub visibility: String, // "public" or "private"
+    pub public: bool, // true for public, false for private
+}
+
+#[derive(Debug, Serialize)]
+pub struct PermissionOperation {
+    pub target_user_id: u64,
+    pub relationship: String, // "owner", "editor", "viewer"
+    pub action: String, // "grant" or "revoke"
+}
+
+#[derive(Debug, Serialize)]
+pub struct FilePermissionRequest {
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub public: Option<bool>, // Optional - true for public, false for private
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permissions: Option<PermissionOperation>, // Optional - permissions object
 }
 
 pub enum ApiClient {
@@ -843,11 +859,11 @@ impl ApiClient {
     pub async fn change_file_visibility(
         &self,
         path: &str,
-        visibility: &str,
+        is_public: bool,
     ) -> Result<SFile, ApiError> {
         let visibility_request = ChangeVisibilityRequest {
             path: path.to_string(),
-            visibility: visibility.to_string(),
+            public: is_public,
         };
 
         match self {
@@ -912,5 +928,120 @@ impl ApiClient {
                 }
             }
         }
+    }
+
+    /// Unified file operations - change visibility and/or permissions (requires session to be set)
+    pub async fn set_permissions_and_visibility(
+        &self,
+        path: &str,
+        public: Option<bool>,
+        permissions: Option<PermissionOperation>,
+    ) -> Result<SFile, ApiError> {
+        let unified_request = FilePermissionRequest {
+            path: path.to_string(),
+            public,
+            permissions,
+        };
+
+        match self {
+            ApiClient::Http {
+                client,
+                base_url,
+                session_id,
+            } => {
+                let session = session_id.as_ref().ok_or_else(|| ApiError::Http {
+                    status: StatusCode::UNAUTHORIZED,
+                    body: "No session set. Call set_session() first.".to_string(),
+                })?;
+
+                let url = format!("{base_url}/files");
+                let response = client
+                    .patch(&url)
+                    .header("Authorization", format!("Bearer {session}"))
+                    .json(&unified_request)
+                    .send()
+                    .await?;
+
+                if response.status().is_success() {
+                    let file = response.json::<SFile>().await?;
+                    Ok(file)
+                } else {
+                    let status = response.status();
+                    let body = response.text().await.unwrap_or_default();
+                    Err(ApiError::Http { status, body })
+                }
+            }
+            ApiClient::Local { router, session_id } => {
+                let session = session_id.as_ref().ok_or_else(|| ApiError::Http {
+                    status: StatusCode::UNAUTHORIZED,
+                    body: "No session set. Call set_session() first.".to_string(),
+                })?;
+
+                let body = serde_json::to_string(&unified_request)?;
+                let request = Request::builder()
+                    .method(Method::PATCH)
+                    .uri("/files")
+                    .header("Authorization", format!("Bearer {session}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(body))
+                    .unwrap();
+
+                let mut service = router.as_ref().clone();
+                let response = Service::<Request<Body>>::call(&mut service, request)
+                    .await
+                    .map_err(|e| {
+                        ApiError::Service(Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+                    })?;
+
+                if response.status().is_success() {
+                    let body_bytes = to_bytes(response.into_body(), usize::MAX).await?;
+                    let file: SFile = serde_json::from_slice(&body_bytes)?;
+                    Ok(file)
+                } else {
+                    let status = response.status();
+                    let body_bytes = to_bytes(response.into_body(), usize::MAX).await?;
+                    let body = String::from_utf8_lossy(&body_bytes).to_string();
+                    Err(ApiError::Http { status, body })
+                }
+            }
+        }
+    }
+
+    /// Grant permissions to a user on a file (requires session to be set)
+    pub async fn grant_file_permission(
+        &self,
+        path: &str,
+        target_user_id: u64,
+        relationship: &str,
+    ) -> Result<SFile, ApiError> {
+        self.set_permissions_and_visibility(
+            path,
+            None,
+            Some(PermissionOperation {
+                target_user_id,
+                relationship: relationship.to_string(),
+                action: "grant".to_string(),
+            }),
+        )
+        .await
+    }
+
+    /// Revoke permissions from a user on a file (requires session to be set)
+    pub async fn revoke_file_permission(
+        &self,
+        path: &str,
+        target_user_id: u64,
+        relationship: &str,
+    ) -> Result<SFile, ApiError> {
+        self.set_permissions_and_visibility(
+            path,
+            None,
+            Some(PermissionOperation {
+                target_user_id,
+                relationship: relationship.to_string(),
+                action: "revoke".to_string(),
+            }),
+        )
+        .await
     }
 }
