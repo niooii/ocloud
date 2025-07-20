@@ -1,0 +1,12 @@
+{
+    // Configure Rust Analyzer to include the 'app/' directory as a linked project.
+    // This tells Rust Analyzer where to find the Cargo.toml file for your Rust project,
+    // enabling full IntelliSense features even when the workspace root is above 'app/'.
+    "rust-analyzer.linkedProjects": [
+        "app/Cargo.toml"
+    ],
+
+    // Optional: If you have other settings specific to Rust Analyzer, you can add them here.
+    // For example, to enable inlay hints for types:
+    // "rust-analyzer.inlayHints.typeHints.enable": true
+}

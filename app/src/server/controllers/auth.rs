@@ -80,11 +80,13 @@ impl AuthController {
         })?;
 
         // Verify password (constant-time comparison as per book.md)
-        let password_valid = password::verify_password(request.password, user.password_hash.clone()).await?;
-        
+        let password_valid =
+            password::verify_password(request.password, user.password_hash.clone()).await?;
+
         if !password_valid {
             // Still do some work to prevent timing attacks (as per book.md)
-            let _ = password::verify_password("dummy".to_string(), user.password_hash.clone()).await;
+            let _ =
+                password::verify_password("dummy".to_string(), user.password_hash.clone()).await;
             return Err(ServerError::AuthenticationError {
                 message: "Invalid credentials".to_string(),
             });
@@ -207,18 +209,15 @@ impl AuthController {
     /// Build auth context for a user (load all their permissions)
     /// TODO! seperate into multiple queuries?
     pub async fn build_auth_context(&self, user_id: i64) -> ServerResult<AuthContext> {
-        let user = sqlx::query!(
-            "SELECT username FROM users WHERE id = $1",
-            user_id
-        )
-        .fetch_optional(&self.db)
-        .await
-        .map_err(|e| ServerError::DatabaseError {
-            message: format!("Failed to find user: {e}"),
-        })?
-        .ok_or_else(|| ServerError::AuthenticationError {
-            message: "User not found".to_string(),
-        })?;
+        let user = sqlx::query!("SELECT username FROM users WHERE id = $1", user_id)
+            .fetch_optional(&self.db)
+            .await
+            .map_err(|e| ServerError::DatabaseError {
+                message: format!("Failed to find user: {e}"),
+            })?
+            .ok_or_else(|| ServerError::AuthenticationError {
+                message: "User not found".to_string(),
+            })?;
 
         let mut context = AuthContext::new(user_id, user.username);
 
@@ -247,18 +246,31 @@ impl AuthController {
     }
 
     /// Grant permission to a user on a resource
-    pub async fn grant_permission(&self, granter_id: i64, request: GrantPermissionRequest) -> ServerResult<()> {
+    pub async fn grant_permission(
+        &self,
+        granter_id: i64,
+        request: GrantPermissionRequest,
+    ) -> ServerResult<()> {
         // Verify granter has permission to grant this
         let granter_context = self.build_auth_context(granter_id).await?;
-        
-        if !granter_context.has_permission(&request.resource_type, request.resource_id.map(|id| id as i64), Permission::ChangePermissions) {
+
+        if !granter_context.has_permission(
+            &request.resource_type,
+            request.resource_id.map(|id| id as i64),
+            Permission::ChangePermissions,
+        ) {
             return Err(ServerError::AuthorizationError {
                 message: "Insufficient permissions to grant access".to_string(),
             });
         }
 
         // Find or create resource
-        let resource = self.get_or_create_resource(&request.resource_type, request.resource_id.map(|id| id as i64)).await?;
+        let resource = self
+            .get_or_create_resource(
+                &request.resource_type,
+                request.resource_id.map(|id| id as i64),
+            )
+            .await?;
 
         // Check if relationship already exists
         let existing = sqlx::query!(
@@ -302,11 +314,19 @@ impl AuthController {
     }
 
     /// Revoke permission from a user on a resource
-    pub async fn revoke_permission(&self, revoker_id: i64, request: RevokePermissionRequest) -> ServerResult<()> {
+    pub async fn revoke_permission(
+        &self,
+        revoker_id: i64,
+        request: RevokePermissionRequest,
+    ) -> ServerResult<()> {
         // Verify revoker has permission to revoke this
         let revoker_context = self.build_auth_context(revoker_id).await?;
-        
-        if !revoker_context.has_permission(&request.resource_type, request.resource_id.map(|id| id as i64), Permission::ChangePermissions) {
+
+        if !revoker_context.has_permission(
+            &request.resource_type,
+            request.resource_id.map(|id| id as i64),
+            Permission::ChangePermissions,
+        ) {
             return Err(ServerError::AuthorizationError {
                 message: "Insufficient permissions to revoke access".to_string(),
             });
@@ -354,7 +374,11 @@ impl AuthController {
     }
 
     /// Get or create a resource entry
-    async fn get_or_create_resource(&self, resource_type: &str, resource_id: Option<i64>) -> ServerResult<Resource> {
+    async fn get_or_create_resource(
+        &self,
+        resource_type: &str,
+        resource_id: Option<i64>,
+    ) -> ServerResult<Resource> {
         // Try to find existing resource
         if let Some(resource) = sqlx::query_as!(
             Resource,
@@ -392,7 +416,11 @@ impl AuthController {
     }
 
     /// Get permissions for a resource
-    pub async fn get_resource_permissions(&self, resource_type: &str, resource_id: Option<i64>) -> ServerResult<Vec<PermissionInfo>> {
+    pub async fn get_resource_permissions(
+        &self,
+        resource_type: &str,
+        resource_id: Option<i64>,
+    ) -> ServerResult<Vec<PermissionInfo>> {
         let resource = sqlx::query_as!(
             Resource,
             "SELECT id, resource_type, resource_id, created_at FROM resources 

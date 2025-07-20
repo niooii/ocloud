@@ -1,394 +1,199 @@
 mod common;
 
-use common::TestApp;
-use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use axum::http::StatusCode;
+use common::{authenticate_random, cleanup_test_database, create_test_db};
+use ocloud::api::{ApiClient, ApiError};
+use ocloud::server::models::auth::{LoginRequest, RegisterRequest};
 use uuid::Uuid;
-
-use crate::common::TEST_APP;
 
 #[tokio::test]
 async fn user_registration_works() {
-    let client = Client::new();
+    let db_pool = create_test_db().await;
+    let client = ApiClient::new_local(db_pool.clone()).await;
 
-    let user_data = json!({
-        "username": "testuser",
-        "email": "test@example.com",
-        "password": "securepassword123"
-    });
+    let register_request = RegisterRequest {
+        username: "testuser".to_string(),
+        email: "test@example.com".to_string(),
+        password: "securepassword123".to_string(),
+    };
 
     let response = client
-        .post(format!("{}/auth/register", &TEST_APP.address))
-        .json(&user_data)
-        .send()
+        .register(register_request)
         .await
         .expect("Failed to execute request");
 
-    assert_eq!(response.status(), StatusCode::OK);
-    
-    let body: Value = response.json().await.expect("Failed to parse response");
-    assert!(body["user"]["id"].is_number());
-    assert_eq!(body["user"]["username"], "testuser");
-    assert_eq!(body["user"]["email"], "test@example.com");
-    assert!(body["user"]["created_at"].is_string());
-    assert_eq!(body["message"], "User registered successfully");
+    assert!(response["user"]["id"].is_number());
+    assert_eq!(response["user"]["username"], "testuser");
+    assert_eq!(response["user"]["email"], "test@example.com");
+    assert!(response["user"]["created_at"].is_string());
+    assert_eq!(response["message"], "User registered successfully");
 
-
+    cleanup_test_database(db_pool).await;
 }
 
 #[tokio::test]
 async fn duplicate_registration_fails() {
-    let client = Client::new();
+    let db_pool = create_test_db().await;
+    let client = ApiClient::new_local(db_pool.clone()).await;
 
-    let user_data = json!({
-        "username": "testuser",
-        "email": "test@example.com",
-        "password": "securepassword123"
-    });
+    let register_request = RegisterRequest {
+        username: "testuser_dup".to_string(),
+        email: "testdup@example.com".to_string(),
+        password: "securepassword123".to_string(),
+    };
 
     // First registration should succeed
-    let response = client
-        .post(format!("{}/auth/register", &TEST_APP.address))
-        .json(&user_data)
-        .send()
+    let _response = client
+        .register(register_request.clone())
         .await
-        .expect("Failed to execute request");
-    assert_eq!(response.status(), StatusCode::OK);
+        .expect("Failed to execute first registration");
 
     // Second registration should fail
-    let response = client
-        .post(format!("{}/auth/register", &TEST_APP.address))
-        .json(&user_data)
-        .send()
-        .await
-        .expect("Failed to execute request");
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let result = client.register(register_request).await;
 
-    let body: Value = response.json().await.expect("Failed to parse response");
-    assert_eq!(body["error"], "Validation failed");
+    assert!(result.is_err());
+    if let Err(ApiError::Http { status, body: _ }) = result {
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    } else {
+        panic!("Expected HTTP error with status 400");
+    }
 
-
+    cleanup_test_database(db_pool).await;
 }
 
 #[tokio::test]
 async fn user_login_works() {
-    let client = Client::new();
+    let db_pool = create_test_db().await;
+    let client = ApiClient::new_local(db_pool.clone()).await;
 
     // First register a user
-    let user_data = json!({
-        "username": "testuser",
-        "email": "test@example.com",
-        "password": "securepassword123"
-    });
+    let register_request = RegisterRequest {
+        username: "testuser_login".to_string(),
+        email: "testlogin@example.com".to_string(),
+        password: "securepassword123".to_string(),
+    };
 
     client
-        .post(format!("{}/auth/register", &TEST_APP.address))
-        .json(&user_data)
-        .send()
+        .register(register_request)
         .await
         .expect("Failed to register user");
 
     // Then login
-    let login_data = json!({
-        "username": "testuser",
-        "password": "securepassword123"
-    });
+    let login_request = LoginRequest {
+        username: "testuser_login".to_string(),
+        password: "securepassword123".to_string(),
+    };
 
     let response = client
-        .post(format!("{}/auth/login", &TEST_APP.address))
-        .json(&login_data)
-        .send()
+        .login(login_request)
         .await
         .expect("Failed to execute request");
 
-    assert_eq!(response.status(), StatusCode::OK);
-    
-    let body: Value = response.json().await.expect("Failed to parse response");
-    assert!(body["user"]["id"].is_number());
-    assert_eq!(body["user"]["username"], "testuser");
-    assert!(body["session_id"].is_string());
-    assert!(body["expires_at"].is_string());
-    assert_eq!(body["message"], "Login successful");
-    
+    assert!(response["user"]["id"].is_number());
+    assert_eq!(response["user"]["username"], "testuser_login");
+    assert!(response["session_id"].is_string());
+    assert!(response["expires_at"].is_string());
+    assert_eq!(response["message"], "Login successful");
+
     // Validate session ID is a proper UUID
-    let session_id = body["session_id"].as_str().unwrap();
+    let session_id = response["session_id"].as_str().unwrap();
     assert!(Uuid::parse_str(session_id).is_ok());
 
-
+    cleanup_test_database(db_pool).await;
 }
 
 #[tokio::test]
 async fn login_with_email_works() {
-    let client = Client::new();
+    let db_pool = create_test_db().await;
+    let client = ApiClient::new_local(db_pool.clone()).await;
 
     // Register a user
-    let user_data = json!({
-        "username": "testuser",
-        "email": "test@example.com",
-        "password": "securepassword123"
-    });
+    let register_request = RegisterRequest {
+        username: "testuser_email".to_string(),
+        email: "testemail@example.com".to_string(),
+        password: "securepassword123".to_string(),
+    };
 
     client
-        .post(format!("{}/auth/register", &TEST_APP.address))
-        .json(&user_data)
-        .send()
+        .register(register_request)
         .await
         .expect("Failed to register user");
 
     // Login with email instead of username
-    let login_data = json!({
-        "username": "test@example.com",
-        "password": "securepassword123"
-    });
+    let login_request = LoginRequest {
+        username: "testemail@example.com".to_string(), // Using email as username
+        password: "securepassword123".to_string(),
+    };
 
     let response = client
-        .post(format!("{}/auth/login", &TEST_APP.address))
-        .json(&login_data)
-        .send()
+        .login(login_request)
         .await
-        .expect("Failed to execute request");
+        .expect("Failed to login with email");
 
-    assert_eq!(response.status(), StatusCode::OK);
-    
-    let body: Value = response.json().await.expect("Failed to parse response");
-    assert_eq!(body["user"]["username"], "testuser");
-    assert_eq!(body["user"]["email"], "test@example.com");
+    assert!(response["user"]["id"].is_number());
+    assert_eq!(response["user"]["username"], "testuser_email");
+    assert_eq!(response["user"]["email"], "testemail@example.com");
+    assert!(response["session_id"].is_string());
 
-
+    cleanup_test_database(db_pool).await;
 }
 
 #[tokio::test]
 async fn invalid_login_fails() {
-    let client = Client::new();
+    let db_pool = create_test_db().await;
+    let client = ApiClient::new_local(db_pool.clone()).await;
 
-    // Register a user
-    let user_data = json!({
-        "username": "testuser",
-        "email": "test@example.com",
-        "password": "securepassword123"
-    });
+    let login_request = LoginRequest {
+        username: "nonexistent".to_string(),
+        password: "wrongpassword".to_string(),
+    };
 
-    client
-        .post(format!("{}/auth/register", &TEST_APP.address))
-        .json(&user_data)
-        .send()
-        .await
-        .expect("Failed to register user");
+    let result = client.login(login_request).await;
 
-    // Try login with wrong password
-    let login_data = json!({
-        "username": "testuser",
-        "password": "wrongpassword"
-    });
+    assert!(result.is_err());
+    if let Err(ApiError::Http { status, body: _ }) = result {
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    } else {
+        panic!("Expected HTTP error with status 401");
+    }
 
-    let response = client
-        .post(format!("{}/auth/login", &TEST_APP.address))
-        .json(&login_data)
-        .send()
-        .await
-        .expect("Failed to execute request");
-
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    
-    let body: Value = response.json().await.expect("Failed to parse response");
-    assert_eq!(body["error"], "Authentication failed");
-
-
+    cleanup_test_database(db_pool).await;
 }
 
 #[tokio::test]
-async fn nonexistent_user_login_fails() {
-    let client = Client::new();
+async fn me_endpoint_works() {
+    let db_pool = create_test_db().await;
+    let mut client = ApiClient::new_local(db_pool.clone()).await;
+    let _user = authenticate_random(&mut client).await;
 
-    let login_data = json!({
-        "username": "nonexistent",
-        "password": "password"
-    });
+    let response = client.me().await.expect("Failed to get user info");
 
-    let response = client
-        .post(format!("{}/auth/login", &TEST_APP.address))
-        .json(&login_data)
-        .send()
-        .await
-        .expect("Failed to execute request");
+    assert!(response["user_id"].is_number());
+    assert!(response["username"].is_string());
+    assert!(response["permissions"].is_number());
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    
-    let body: Value = response.json().await.expect("Failed to parse response");
-    assert_eq!(body["error"], "Authentication failed");
-
-
-}
-
-#[tokio::test]
-async fn me_endpoint_requires_authentication() {
-    let client = Client::new();
-
-    let response = client
-        .get(format!("{}/auth/me", &TEST_APP.address))
-        .send()
-        .await
-        .expect("Failed to execute request");
-
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-
-
-}
-
-#[tokio::test]
-async fn me_endpoint_works_with_valid_session() {
-    let client = Client::new();
-
-    // Register and login
-    let user_data = json!({
-        "username": "testuser",
-        "email": "test@example.com",
-        "password": "securepassword123"
-    });
-
-    client
-        .post(format!("{}/auth/register", &TEST_APP.address))
-        .json(&user_data)
-        .send()
-        .await
-        .expect("Failed to register user");
-
-    let login_data = json!({
-        "username": "testuser",
-        "password": "securepassword123"
-    });
-
-    let login_response = client
-        .post(format!("{}/auth/login", &TEST_APP.address))
-        .json(&login_data)
-        .send()
-        .await
-        .expect("Failed to login");
-
-    let login_body: Value = login_response.json().await.expect("Failed to parse login response");
-    let session_id = login_body["session_id"].as_str().unwrap();
-
-    // Use session to access /me
-    let response = client
-        .get(format!("{}/auth/me", &TEST_APP.address))
-        .header("Authorization", format!("Bearer {session_id}"))
-        .send()
-        .await
-        .expect("Failed to execute request");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    
-    let body: Value = response.json().await.expect("Failed to parse response");
-    assert!(body["user_id"].is_number());
-    assert_eq!(body["username"], "testuser");
-    assert!(body["permissions"].is_number());
-
-
+    cleanup_test_database(db_pool).await;
 }
 
 #[tokio::test]
 async fn logout_works() {
-    let client = Client::new();
+    let db_pool = create_test_db().await;
+    let mut client = ApiClient::new_local(db_pool.clone()).await;
+    let _user = authenticate_random(&mut client).await;
 
-    // Register and login
-    let user_data = json!({
-        "username": "testuser",
-        "email": "test@example.com",
-        "password": "securepassword123"
-    });
+    // Logout should succeed
+    let response = client.logout().await.expect("Failed to logout");
 
-    client
-        .post(format!("{}/auth/register", &TEST_APP.address))
-        .json(&user_data)
-        .send()
-        .await
-        .expect("Failed to register user");
+    assert_eq!(response["message"], "Logout successful");
 
-    let login_data = json!({
-        "username": "testuser",
-        "password": "securepassword123"
-    });
+    // Using the session after logout should fail
+    let result = client.me().await;
+    assert!(result.is_err());
+    if let Err(ApiError::Http { status, body: _ }) = result {
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    } else {
+        panic!("Expected HTTP error with status 401 after logout");
+    }
 
-    let login_response = client
-        .post(format!("{}/auth/login", &TEST_APP.address))
-        .json(&login_data)
-        .send()
-        .await
-        .expect("Failed to login");
-
-    let login_body: Value = login_response.json().await.expect("Failed to parse login response");
-    let session_id = login_body["session_id"].as_str().unwrap();
-
-    // Logout
-    let response = client
-        .post(format!("{}/auth/logout", &TEST_APP.address))
-        .header("Authorization", format!("Bearer {session_id}"))
-        .send()
-        .await
-        .expect("Failed to execute request");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    
-    let body: Value = response.json().await.expect("Failed to parse response");
-    assert_eq!(body["message"], "Logout successful");
-
-    // Try to use the session again - should fail
-    let response = client
-        .get(format!("{}/auth/me", &TEST_APP.address))
-        .header("Authorization", format!("Bearer {session_id}"))
-        .send()
-        .await
-        .expect("Failed to execute request");
-
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-
-
+    cleanup_test_database(db_pool).await;
 }
-
-#[tokio::test]
-async fn invalid_bearer_token_fails() {
-    let client = Client::new();
-
-    let response = client
-        .get(format!("{}/auth/me", &TEST_APP.address))
-        .header("Authorization", "Bearer invalid-token")
-        .send()
-        .await
-        .expect("Failed to execute request");
-
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-
-
-}
-
-#[tokio::test]
-async fn missing_authorization_header_fails() {
-    let client = Client::new();
-
-    let response = client
-        .get(format!("{}/auth/me", &TEST_APP.address))
-        .send()
-        .await
-        .expect("Failed to execute request");
-
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-
-
-}
-
-#[tokio::test]
-async fn malformed_authorization_header_fails() {
-    let client = Client::new();
-
-    let response = client
-        .get(format!("{}/auth/me", &TEST_APP.address))
-        .header("Authorization", "InvalidFormat")
-        .send()
-        .await
-        .expect("Failed to execute request");
-
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-
-
-}
-

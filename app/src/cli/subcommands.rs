@@ -6,7 +6,7 @@ use url::Url;
 #[derive(Subcommand, Debug)]
 pub enum SubCommand {
     /// Upload files to oCloud.
-    Upload { 
+    Upload {
         path: PathBuf,
         /// Preserve the directory structure relative to the cwd when uploading.
         /// Ex: ocloud upload -p ./books/fiction/AM.pdf will be uploaded to
@@ -23,10 +23,10 @@ pub enum SubCommand {
     /// Manage or run the oCloud server.
     Server {
         #[command(subcommand)]
-        command: ServerCommand
+        command: ServerCommand,
     },
     /// Print the paths that oCloud uses.
-    Paths
+    Paths,
 }
 
 #[derive(Subcommand, Debug)]
@@ -34,12 +34,12 @@ pub enum ServerCommand {
     /// Runs the server.
     Run {
         /// The host to use when starting the server.
-        #[arg(short = 'H', long = "host", default_value="0.0.0.0")]
+        #[arg(short = 'H', long = "host", default_value = "0.0.0.0")]
         host: String,
         /// The port to use when starting the server.
-        #[arg(short = 'p', long = "port", default_value="8000")]
+        #[arg(short = 'p', long = "port", default_value = "8000")]
         port: u16,
     },
     /// Clears all data in the server, including uploaded files, etc.
-    Wipe
+    Wipe,
 }

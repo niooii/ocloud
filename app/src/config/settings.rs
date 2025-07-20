@@ -1,7 +1,7 @@
+use super::YamlConfig;
 use config::{Config, ConfigError, Environment as ConfigEnvironment};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use super::YamlConfig;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Settings {
@@ -87,11 +87,11 @@ pub struct DirectorySettings {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum Environment {
-    #[serde(alias="development", alias="dev")]
+    #[serde(alias = "development", alias = "dev")]
     Development,
-    #[serde(alias="production", alias="prod")]
+    #[serde(alias = "production", alias = "prod")]
     Production,
-    #[serde(alias="testing", alias="test")]
+    #[serde(alias = "testing", alias = "test")]
     Testing,
 }
 
@@ -99,7 +99,7 @@ impl Environment {
     pub fn as_str(&self) -> &'static str {
         match self {
             Environment::Development => "development",
-            Environment::Production => "production", 
+            Environment::Production => "production",
             Environment::Testing => "testing",
         }
     }
@@ -124,21 +124,14 @@ impl DatabaseSettings {
     pub fn connection_string(&self) -> String {
         format!(
             "postgres://{}:{}@{}:{}/{}",
-            self.username,
-            self.password,
-            self.host,
-            self.port,
-            self.database_name
+            self.username, self.password, self.host, self.port, self.database_name
         )
     }
 
     pub fn connection_string_without_db(&self) -> String {
         format!(
             "postgres://{}:{}@{}:{}/postgres",
-            self.username,
-            self.password,
-            self.host,
-            self.port
+            self.username, self.password, self.host, self.port
         )
     }
 }
@@ -146,13 +139,13 @@ impl DatabaseSettings {
 impl Settings {
     pub fn try_from_configuration() -> Result<Settings, ConfigError> {
         use super::parse_or_prompt_yaml;
-        
+
         let default_env = if cfg!(test) {
             "testing"
-        } else if cfg!(debug_assertions) { 
-            "development" 
-        } else { 
-            "production" 
+        } else if cfg!(debug_assertions) {
+            "development"
+        } else {
+            "production"
         };
         let environment: Environment = std::env::var("APP_ENVIRONMENT")
             .unwrap_or_else(|_| default_env.into())
@@ -163,23 +156,33 @@ impl Settings {
         let environment_config = match environment {
             Environment::Development => {
                 let dev_config: DevelopmentConfig = parse_or_prompt_yaml();
-                serde_yaml::to_string(&dev_config).map_err(|_| ConfigError::Message("Failed to serialize development config".to_string()))?
-            },
+                serde_yaml::to_string(&dev_config).map_err(|_| {
+                    ConfigError::Message("Failed to serialize development config".to_string())
+                })?
+            }
             Environment::Production => {
                 let prod_config: ProductionConfig = parse_or_prompt_yaml();
-                serde_yaml::to_string(&prod_config).map_err(|_| ConfigError::Message("Failed to serialize production config".to_string()))?
-            },
+                serde_yaml::to_string(&prod_config).map_err(|_| {
+                    ConfigError::Message("Failed to serialize production config".to_string())
+                })?
+            }
             Environment::Testing => {
                 let test_config: TestingConfig = parse_or_prompt_yaml();
-                serde_yaml::to_string(&test_config).map_err(|_| ConfigError::Message("Failed to serialize testing config".to_string()))?
-            },
+                serde_yaml::to_string(&test_config).map_err(|_| {
+                    ConfigError::Message("Failed to serialize testing config".to_string())
+                })?
+            }
         };
 
-        let base_yaml = serde_yaml::to_string(&base_config).map_err(|_| ConfigError::Message("Failed to serialize base config".to_string()))?;
+        let base_yaml = serde_yaml::to_string(&base_config)
+            .map_err(|_| ConfigError::Message("Failed to serialize base config".to_string()))?;
 
         let settings = Config::builder()
             .add_source(config::File::from_str(&base_yaml, config::FileFormat::Yaml))
-            .add_source(config::File::from_str(&environment_config, config::FileFormat::Yaml))
+            .add_source(config::File::from_str(
+                &environment_config,
+                config::FileFormat::Yaml,
+            ))
             .add_source(
                 ConfigEnvironment::with_prefix("APP")
                     .prefix_separator("_")

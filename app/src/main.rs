@@ -3,9 +3,9 @@ use std::env::set_var;
 use cli::error::CliResult;
 use tracing_subscriber::EnvFilter;
 
+mod cli;
 mod config;
 mod server;
-mod cli;
 
 #[tokio::main]
 async fn main() -> CliResult<()> {

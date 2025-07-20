@@ -90,8 +90,14 @@ mod tests {
 
     #[test]
     fn test_sanitize_path_component() {
-        assert_eq!(sanitize_path_component("hello-world_123.txt"), "hello-world_123.txt");
+        assert_eq!(
+            sanitize_path_component("hello-world_123.txt"),
+            "hello-world_123.txt"
+        );
         assert_eq!(sanitize_path_component("hello<>world"), "helloworld");
-        assert_eq!(sanitize_path_component("file/with/slashes"), "filewithslashes");
+        assert_eq!(
+            sanitize_path_component("file/with/slashes"),
+            "filewithslashes"
+        );
     }
 }

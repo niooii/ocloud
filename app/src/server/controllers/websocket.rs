@@ -1,13 +1,21 @@
-use std::{collections::HashMap, sync::Arc, sync::atomic::{AtomicU64, Ordering}};
 use axum::extract::ws::{Message, WebSocket};
+use enum_dispatch::enum_dispatch;
 use futures::{SinkExt, StreamExt};
 use serde::Serialize;
+use std::{
+    collections::HashMap,
+    sync::atomic::{AtomicU64, Ordering},
+    sync::Arc,
+};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 use uuid::Uuid;
-use enum_dispatch::enum_dispatch;
 
-use crate::server::{error::{ServerError, ServerResult}, models::files::CancelUploadEvent, ServerState};
+use crate::server::{
+    error::{ServerError, ServerResult},
+    models::files::CancelUploadEvent,
+    ServerState,
+};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct OutgoingWebSocketPayload<T: Serialize> {
@@ -24,7 +32,7 @@ pub struct ErrorEvent {
     pub message: String,
 }
 
-pub trait WsOutEvent: Serialize + Clone + 'static { 
+pub trait WsOutEvent: Serialize + Clone + 'static {
     /// Returns the canonical name for this event type.
     /// This is automatically implemented by the #[WsIncomingEvent] macro.
     fn event_name() -> &'static str;
@@ -65,14 +73,20 @@ pub struct Ping;
 
 #[derive(ocloud_macros::WsOutEvent, Clone, Serialize)]
 pub struct Pong {
-    message: String
+    message: String,
 }
 
 impl WsIncomingEvent for Ping {
     async fn handle(self, state: &ServerState, connection_id: Uuid) -> ServerResult<()> {
-        state.ws_controller.send(connection_id, Pong {
-            message: "Pong!".into()
-        }).await;
+        state
+            .ws_controller
+            .send(
+                connection_id,
+                Pong {
+                    message: "Pong!".into(),
+                },
+            )
+            .await;
 
         Ok(())
     }
@@ -91,11 +105,15 @@ impl WebSocketControllerInner {
         }
     }
 
-    pub async fn add_connection(&self, websocket: WebSocket, server_state: &ServerState) -> ServerResult<()> {
+    pub async fn add_connection(
+        &self,
+        websocket: WebSocket,
+        server_state: &ServerState,
+    ) -> ServerResult<()> {
         let connection_id = Uuid::new_v4();
         let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
         let server_state_clone = server_state.clone();
-        
+
         let connection = WebSocketConnection {
             id: connection_id,
             sender,
@@ -118,9 +136,12 @@ impl WebSocketControllerInner {
                 match msg {
                     Ok(Message::Text(text)) => {
                         info!("Received WebSocket message: {}", text);
-                        
+
                         // Handle the incoming event
-                        if let Err(error) = self_clone.handle_incoming_message(&text, connection_id, &server_state_clone).await {
+                        if let Err(error) = self_clone
+                            .handle_incoming_message(&text, connection_id, &server_state_clone)
+                            .await
+                        {
                             error!("Error handling WebSocket message: {}", error);
                         }
                     }
@@ -161,7 +182,6 @@ impl WebSocketControllerInner {
         Ok(())
     }
 
-
     pub async fn get_connection_count(&self) -> usize {
         self.connections.read().await.len()
     }
@@ -171,28 +191,29 @@ impl WebSocketControllerInner {
         message: &str,
         connection_id: Uuid,
         server_state: &ServerState,
-    ) ->ServerResult<()> {
+    ) -> ServerResult<()> {
         // Parse JSON directly into the enum using serde tagged enum deserialization
-        let event: WsIncomingEventType = serde_json::from_str(message)
-            .map_err(|e| ServerError::ValidationError {message: e.to_string()})?;
-        
+        let event: WsIncomingEventType =
+            serde_json::from_str(message).map_err(|e| ServerError::ValidationError {
+                message: e.to_string(),
+            })?;
+
         // Handle the event using enum dispatch
         event.handle(server_state, connection_id).await
     }
-
 
     /// Send function that takes any WsOutEvent and wraps it in OutgoingWebSocketPayload
     pub async fn send<T: WsOutEvent>(&self, connection_id: Uuid, data: T) {
         let connections = self.connections.read().await;
         if let Some(connection) = connections.get(&connection_id) {
             let sequence = connection.sequence.fetch_add(1, Ordering::SeqCst);
-            
+
             let payload = OutgoingWebSocketPayload {
                 d: data,
                 s: sequence,
                 t: T::event_name().to_string(),
             };
-            
+
             let message = match serde_json::to_string(&payload) {
                 Ok(json) => json,
                 Err(e) => {
@@ -200,9 +221,12 @@ impl WebSocketControllerInner {
                     return;
                 }
             };
-            
+
             if let Err(e) = connection.sender.send(message) {
-                error!("Failed to send message to connection {}: {}", connection_id, e);
+                error!(
+                    "Failed to send message to connection {}: {}",
+                    connection_id, e
+                );
             }
         }
     }
@@ -212,13 +236,13 @@ impl WebSocketControllerInner {
         let connections = self.connections.read().await;
         for connection in connections.values() {
             let sequence = connection.sequence.fetch_add(1, Ordering::SeqCst);
-            
+
             let payload = OutgoingWebSocketPayload {
                 d: data.clone(),
                 s: sequence,
                 t: T::event_name().to_string(),
             };
-            
+
             let message = match serde_json::to_string(&payload) {
                 Ok(json) => json,
                 Err(e) => {
@@ -226,9 +250,12 @@ impl WebSocketControllerInner {
                     continue;
                 }
             };
-            
+
             if let Err(e) = connection.sender.send(message) {
-                error!("Failed to send broadcast message to connection {}: {}", connection.id, e);
+                error!(
+                    "Failed to send broadcast message to connection {}: {}",
+                    connection.id, e
+                );
             }
         }
     }

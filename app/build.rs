@@ -19,11 +19,12 @@ impl<'ast> Visit<'ast> for WsEventCollector {
             }
             // Also check for the full path
             if attr.path().segments.len() == 2
-                && attr.path().segments[0].ident == "ocloud_macros" 
-                    && attr.path().segments[1].ident == "WsIncomingEvent" {
-                    self.events.push(node.ident.to_string());
-                    break;
-                }
+                && attr.path().segments[0].ident == "ocloud_macros"
+                && attr.path().segments[1].ident == "WsIncomingEvent"
+            {
+                self.events.push(node.ident.to_string());
+                break;
+            }
         }
         syn::visit::visit_item_struct(self, node);
     }
@@ -31,20 +32,23 @@ impl<'ast> Visit<'ast> for WsEventCollector {
 
 fn main() {
     let mut collector = WsEventCollector { events: Vec::new() };
-    
+
     // Scan all .rs files in src/
     scan_directory("src", &mut collector);
-    
+
     // Generate the enum code
     let enum_code = generate_ws_enum_code(&collector.events);
-    
+
     // Write to OUT_DIR
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("ws_events.rs");
     fs::write(&dest_path, enum_code).unwrap();
-    
+
     println!("cargo:rerun-if-changed=src/");
-    println!("Generated WebSocket events enum with {} variants", collector.events.len());
+    println!(
+        "Generated WebSocket events enum with {} variants",
+        collector.events.len()
+    );
 }
 
 fn scan_directory(dir: &str, collector: &mut WsEventCollector) {
@@ -73,19 +77,21 @@ fn generate_ws_enum_code(events: &[String]) -> String {
             // No WebSocket events found - generating empty enum
             #[derive(Debug, Clone)]
             pub enum WsIncomingEventType {}
-            "#
+            "#,
         );
     }
-    
-    let variants_code: Vec<String> = events.iter()
+
+    let variants_code: Vec<String> = events
+        .iter()
         .map(|name| format!("    {name}({name}),"))
         .collect();
-    
-    let variant_names = events.iter()
+
+    let variant_names = events
+        .iter()
         .map(|name| format!("\"{name}\""))
         .collect::<Vec<_>>()
         .join(", ");
-    
+
     format!(
         r#"
         // AUTO-GENERATED WebSocket Events Enum

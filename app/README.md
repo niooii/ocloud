@@ -44,10 +44,15 @@ Example: `curl -X POST http://localhost:8000/files/root/folder/ -F "file=@myfile
 
 Example: `curl -X DELETE http://localhost:8000/files/root/myfile.txt`
 
-#### `PATCH /files`
+#### `PUT /files`
 Move/rename files. Request body: `{"from": "root/old/path", "to": "root/new/path"}`
 
-Example: `curl -X PATCH http://localhost:8000/files/root -d '{"from":"root/a.txt","to":"root/b.txt"}' -H "Content-Type: application/json"`
+Example: `curl -X PUT http://localhost:8000/files -d '{"from":"root/a.txt","to":"root/b.txt"}' -H "Content-Type: application/json"`
+
+#### `PATCH /files` (Protected)
+Change file visibility. Request body: `{"path": "root/file.txt", "visibility": "public"}` or `{"path": "root/file.txt", "visibility": "private"}`
+
+Example: `curl -X PATCH http://localhost:8000/files -d '{"path":"root/file.txt","visibility":"public"}' -H "Content-Type: application/json" -H "Authorization: Bearer <session_id>"`
 
 ### Authentication
 
@@ -164,6 +169,7 @@ ws.onmessage = (event) => console.log(JSON.parse(event.data));
 ~~- AUTH????????? (kinda and ReBAC)
 - tie each websocket connection to a user id (or not, depending on my next point)
 - default create a public folder where all files are available to everyone, even unauthenticated users (useful for sharing stuff). ~~
+- TODO tests kinda pollute postgres with random databases if they panic.. panic hook?
 - Well the test config is kinda useless ngl, make it useful or remove it
 - for each [file] uploaded, store a [file].meta that contains all the names the media is aliased under. can be used to restore the database and easily download everything
 - Add multi upload

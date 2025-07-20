@@ -141,18 +141,24 @@ impl IntoResponse for ServerError {
 
 impl From<serde_json::Error> for ServerError {
     fn from(value: serde_json::Error) -> Self {
-        Self::InternalError { message: format!("JSON serialization error: {value}") }
+        Self::InternalError {
+            message: format!("JSON serialization error: {value}"),
+        }
     }
 }
 
 impl From<sqlx::Error> for ServerError {
     fn from(value: sqlx::Error) -> Self {
-        Self::DatabaseQueryError { message: value.to_string() }
+        Self::DatabaseQueryError {
+            message: value.to_string(),
+        }
     }
 }
 
 impl From<std::io::Error> for ServerError {
     fn from(value: std::io::Error) -> Self {
-        Self::IOError { message: value.to_string() }
+        Self::IOError {
+            message: value.to_string(),
+        }
     }
 }

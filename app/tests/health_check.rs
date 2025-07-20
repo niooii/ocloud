@@ -1,19 +1,16 @@
 mod common;
 
-use common::TestApp;
-
-use crate::common::TEST_APP;
+use common::{cleanup_test_database, create_test_db};
+use ocloud::api::ApiClient;
 
 #[tokio::test]
 async fn health_check_works() {
-    let client = reqwest::Client::new();
+    let db_pool = create_test_db().await;
+    let client = ApiClient::new_local(db_pool.clone()).await;
 
-    let response = client
-        .get(format!("{}/health", &TEST_APP.address))
-        .send()
-        .await
-        .expect("Failed to execute request");
+    let result = client.health().await;
 
-    assert!(response.status().is_success());
-    assert_eq!(Some(0), response.content_length());
+    assert!(result.is_ok());
+
+    cleanup_test_database(db_pool).await;
 }

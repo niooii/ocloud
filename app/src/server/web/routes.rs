@@ -3,10 +3,17 @@ use axum::routing::get;
 use axum::Router;
 use tower_http::cors::CorsLayer;
 
-use crate::server::{controllers::{files::FileController, websocket::WebSocketController}, ServerState};
-use super::handlers::{files, auth, ws};
+use super::handlers::{auth, files, ws};
+use crate::server::{
+    controllers::{files::FileController, websocket::WebSocketController},
+    ServerState,
+};
 
-pub async fn routes(controller: FileController, ws_controller: Option<WebSocketController>, server_state: ServerState) -> Router {
+pub async fn routes(
+    controller: FileController,
+    ws_controller: Option<WebSocketController>,
+    server_state: ServerState,
+) -> Router {
     let cors = CorsLayer::new()
         .allow_origin("http://localhost:3000".parse::<HeaderValue>().unwrap())
         .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
@@ -23,16 +30,15 @@ pub async fn routes(controller: FileController, ws_controller: Option<WebSocketC
         .route("/ping", get(ping))
         .route("/health", get(health_check))
         .layer(axum::Extension(server_state.auth_controller.clone()));
-    
+
     // Add WebSocket routes if WebSocket controller is provided
     if let Some(ws_ctrl) = ws_controller {
         router = router.nest("/", ws::routes(ws_ctrl, controller.clone(), server_state));
     }
-    
-    router
-        .layer(cors)
-        // Rate limiting temporarily disabled
-        // .layer(middleware::rate_limiting_layer())
+
+    router.layer(cors)
+    // Rate limiting temporarily disabled
+    // .layer(middleware::rate_limiting_layer())
 }
 
 async fn ping() -> &'static str {
@@ -41,4 +47,4 @@ async fn ping() -> &'static str {
 
 async fn health_check() -> &'static str {
     ""
-}           
+}

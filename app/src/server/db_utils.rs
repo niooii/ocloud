@@ -1,12 +1,9 @@
-use sqlx::{PgPool, Postgres, Transaction};
 use crate::server::error::{ServerError, ServerResult};
-use tracing::{info, warn};
+use sqlx::{PgPool, Postgres, Transaction};
 use std::future::Future;
+use tracing::{info, warn};
 
-pub async fn execute_in_transaction<F, Fut, R>(
-    pool: &PgPool,
-    operation: F,
-) -> ServerResult<R>
+pub async fn execute_in_transaction<F, Fut, R>(pool: &PgPool, operation: F) -> ServerResult<R>
 where
     F: FnOnce(&mut Transaction<'_, Postgres>) -> Fut,
     Fut: Future<Output = ServerResult<R>> + Send,
@@ -20,7 +17,9 @@ where
         Ok(result) => {
             tx.commit().await.map_err(|e| {
                 warn!("Failed to commit transaction: {}", e);
-                ServerError::DatabaseQueryError { message: e.to_string() }
+                ServerError::DatabaseQueryError {
+                    message: e.to_string(),
+                }
             })?;
             info!("Transaction committed successfully");
             Ok(result)

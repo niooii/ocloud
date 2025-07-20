@@ -1,8 +1,8 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::prelude::FromRow;
-use uuid::Uuid;
 use std::collections::HashSet;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, FromRow)]
 pub struct User {
@@ -57,14 +57,14 @@ impl RelationshipType {
             (RelationshipType::Owner, Permission::Delete) => true,
             (RelationshipType::Owner, Permission::Share) => true,
             (RelationshipType::Owner, Permission::ChangePermissions) => true,
-            
+
             // Editor permissions
             (RelationshipType::Editor, Permission::Read) => true,
             (RelationshipType::Editor, Permission::Write) => true,
             (RelationshipType::Editor, Permission::Delete) => false,
             (RelationshipType::Editor, Permission::Share) => false,
             (RelationshipType::Editor, Permission::ChangePermissions) => false,
-            
+
             // Viewer permissions
             (RelationshipType::Viewer, Permission::Read) => true,
             (RelationshipType::Viewer, _) => false,
@@ -74,7 +74,13 @@ impl RelationshipType {
     /// Get all permissions this relationship grants
     pub fn permissions(&self) -> HashSet<Permission> {
         let mut perms = HashSet::new();
-        for perm in [Permission::Read, Permission::Write, Permission::Delete, Permission::Share, Permission::ChangePermissions] {
+        for perm in [
+            Permission::Read,
+            Permission::Write,
+            Permission::Delete,
+            Permission::Share,
+            Permission::ChangePermissions,
+        ] {
             if self.can_perform(&perm) {
                 perms.insert(perm);
             }
@@ -156,7 +162,7 @@ pub struct LoginRequest {
     pub password: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct RegisterRequest {
     pub username: String,
     pub email: String,
@@ -247,31 +253,44 @@ impl AuthContext {
         }
     }
 
-    pub fn has_permission(&self, resource_type: &str, resource_id: Option<i64>, required_permission: Permission) -> bool {
+    pub fn has_permission(
+        &self,
+        resource_type: &str,
+        resource_id: Option<i64>,
+        required_permission: Permission,
+    ) -> bool {
         // Check if user has any relationship that grants the required permission
         for (res_type, res_id, relationship) in &self.permissions {
-            if res_type == resource_type && *res_id == resource_id
-                && relationship.can_perform(&required_permission) {
-                    return true;
-                }
+            if res_type == resource_type
+                && *res_id == resource_id
+                && relationship.can_perform(&required_permission)
+            {
+                return true;
+            }
         }
 
         false
     }
 
-    pub fn add_permission(&mut self, resource_type: String, resource_id: Option<i64>, relationship: RelationshipType) {
-        self.permissions.insert((resource_type, resource_id, relationship));
+    pub fn add_permission(
+        &mut self,
+        resource_type: String,
+        resource_id: Option<i64>,
+        relationship: RelationshipType,
+    ) {
+        self.permissions
+            .insert((resource_type, resource_id, relationship));
     }
 }
 
 // Password utils
 pub mod password {
+    use crate::server::error::{ServerError, ServerResult};
     use argon2::{
         password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
-        Argon2
+        Argon2,
     };
     use rand_core::OsRng;
-    use crate::server::error::{ServerError, ServerResult};
 
     /// Hash a password using Argon2id (PHC format)
     pub async fn hash_password(password: String) -> ServerResult<String> {
@@ -279,7 +298,7 @@ pub mod password {
         tokio::task::spawn_blocking(move || {
             let salt = SaltString::generate(&mut OsRng);
             let argon2 = Argon2::default();
-            
+
             argon2
                 .hash_password(password.as_bytes(), &salt)
                 .map_err(|e| ServerError::InternalError {
@@ -297,14 +316,15 @@ pub mod password {
     pub async fn verify_password(password: String, hash: String) -> ServerResult<bool> {
         // Use spawn_blocking to avoid blocking the async executor
         tokio::task::spawn_blocking(move || {
-            let parsed_hash = PasswordHash::new(&hash)
-                .map_err(|e| ServerError::InternalError {
-                    message: format!("Invalid password hash: {e}"),
-                })?;
+            let parsed_hash = PasswordHash::new(&hash).map_err(|e| ServerError::InternalError {
+                message: format!("Invalid password hash: {e}"),
+            })?;
 
             let argon2 = Argon2::default();
-            
-            Ok(argon2.verify_password(password.as_bytes(), &parsed_hash).is_ok())
+
+            Ok(argon2
+                .verify_password(password.as_bytes(), &parsed_hash)
+                .is_ok())
         })
         .await
         .map_err(|e| ServerError::InternalError {

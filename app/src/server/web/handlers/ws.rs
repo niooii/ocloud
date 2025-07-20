@@ -6,7 +6,10 @@ use axum::{
 };
 use tracing::info;
 
-use crate::server::{controllers::{websocket::WebSocketController, files::FileController}, ServerState};
+use crate::server::{
+    controllers::{files::FileController, websocket::WebSocketController},
+    ServerState,
+};
 
 #[derive(Clone)]
 pub struct WebSocketState {
@@ -15,13 +18,17 @@ pub struct WebSocketState {
     pub server_state: ServerState,
 }
 
-pub fn routes(ws_controller: WebSocketController, file_controller: FileController, server_state: ServerState) -> Router {
+pub fn routes(
+    ws_controller: WebSocketController,
+    file_controller: FileController,
+    server_state: ServerState,
+) -> Router {
     let state = WebSocketState {
         ws_controller,
         file_controller,
         server_state,
     };
-    
+
     Router::new()
         .route("/ws", get(websocket_handler))
         .with_state(state)
@@ -32,9 +39,13 @@ pub async fn websocket_handler(
     State(state): State<WebSocketState>,
 ) -> Response {
     info!("WebSocket upgrade requested");
-    
+
     ws.on_upgrade(move |socket| async move {
-        if let Err(e) = state.ws_controller.add_connection(socket, &state.server_state).await {
+        if let Err(e) = state
+            .ws_controller
+            .add_connection(socket, &state.server_state)
+            .await
+        {
             tracing::error!("Failed to handle WebSocket connection: {}", e);
         }
     })

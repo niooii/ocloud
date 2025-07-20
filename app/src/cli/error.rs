@@ -1,5 +1,5 @@
-use reqwest::StatusCode;
 use crate::server;
+use reqwest::StatusCode;
 
 pub type CliResult<T> = std::result::Result<T, CliError>;
 
@@ -15,7 +15,9 @@ pub enum CliError {
 
 impl From<std::io::Error> for CliError {
     fn from(value: std::io::Error) -> Self {
-        Self::IoError { err: value.to_string() }
+        Self::IoError {
+            err: value.to_string(),
+        }
     }
 }
 
@@ -27,7 +29,9 @@ impl From<reqwest::Error> for CliError {
 
 impl From<url::ParseError> for CliError {
     fn from(value: url::ParseError) -> Self {
-        Self::UrlParseError { issue: value.to_string() }
+        Self::UrlParseError {
+            issue: value.to_string(),
+        }
     }
 }
 

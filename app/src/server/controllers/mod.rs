@@ -1,12 +1,10 @@
+pub mod auth;
 pub mod files;
 pub mod websocket;
-pub mod auth;
 
 #[cfg(test)]
 mod tests {
     use crate::server::models::files::{VirtualPath, VirtualPathError};
-
-    
 
     #[test]
     fn vpath_semantics() {
@@ -15,7 +13,7 @@ mod tests {
         let p2 = VirtualPath::from("/home/user/");
         assert!(p2.is_dir());
         assert!(p1.path_parts() == p2.path_parts());
-        
+
         assert_eq!(p1.to_string(), p2.to_string());
         let p3 = VirtualPath::from("/home/user/testthing");
         let p4 = VirtualPath::from("/home/usert/estthing");
@@ -28,15 +26,15 @@ mod tests {
         // Test Display trait
         let path = VirtualPath::from("root/documents/");
         assert_eq!(format!("{path}"), "root/documents");
-        
+
         // Test Clone
         let cloned = path.clone();
         assert_eq!(path.to_string(), cloned.to_string());
-        
+
         // Test AsRef<Path>
         let path_ref: &std::path::Path = path.as_ref();
         assert!(path_ref.to_string_lossy().contains("root"));
-        
+
         // Test try_from_string with validation
         assert!(VirtualPath::try_from_string("root/valid/path").is_ok());
         assert_eq!(
@@ -47,17 +45,17 @@ mod tests {
             VirtualPath::try_from_string(""),
             Err(VirtualPathError::EmptyPath)
         );
-        
+
         // Test path manipulation methods
         let root = VirtualPath::root();
         let docs = root.join("documents").unwrap();
         assert_eq!(docs.to_string(), "root/documents");
-        
+
         let file = docs.join_file("test.txt").unwrap();
         assert_eq!(file.to_string(), "root/documents/test.txt");
         assert_eq!(file.extension(), Some("txt"));
         assert_eq!(file.file_stem(), Some("test"));
-        
+
         // Test depth calculation
         assert_eq!(root.depth(), 0);
         assert_eq!(docs.depth(), 1);

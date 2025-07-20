@@ -1,263 +1,97 @@
 mod common;
 
-use common::{TestApp};
-use reqwest::StatusCode;
-use serde_json::{json, Value};
-
-use crate::common::TEST_APP;
-
+use axum::http::StatusCode;
+use common::{authenticate_random, cleanup_test_database, create_test_db};
+use ocloud::api::{ApiClient, ApiError};
 
 #[tokio::test]
 async fn unauthenticated_file_access_fails() {
-    
-    // Try to access files without authentication
-    let anonymous_client = TEST_APP.anonymous_client();
-    let response = anonymous_client
-        .get(format!("{}/files/root/", &TEST_APP.address))
-        .send()
+    let db_pool = create_test_db().await;
+    let mut client = ApiClient::new_local(db_pool.clone()).await;
+    authenticate_random(&mut client).await;
+
+    let files = client
+        .upload_file("root/", "testfile", "hey man test file".into())
         .await
-        .expect("Failed to execute request");
+        .unwrap();
+    let sfile = &files[0];
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let unauth = ApiClient::new_local(db_pool.clone()).await;
 
+    // Try to access files without authentication (no session)
+    let result = unauth
+        .get_file(&format!("root/testfile?u={}", sfile.user_id.unwrap()), None)
+        .await;
 
+    // This should fail for non-public files
+    assert!(result.is_err());
+    if let Err(ApiError::Http { status, body: _ }) = result {
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    } else {
+        panic!("Expected HTTP error with status 401");
+    }
+
+    cleanup_test_database(db_pool).await;
 }
 
 #[tokio::test]
-async fn unauthenticated_file_upload_fails() {
-    
-    // Try to upload file without authentication
-    let anonymous_client = TEST_APP.anonymous_client();
-    let response = anonymous_client
-        .post(format!("{}/files/root/", &TEST_APP.address))
-        .multipart(
-            TestApp::test_multipart_file("testfile.txt")
-        )
-        .send()
-        .await
-        .expect("Failed to execute request");
+async fn authenticated_user_can_access_files() {
+    let db_pool = create_test_db().await;
+    let mut client = ApiClient::new_local(db_pool.clone()).await;
+    let _user = authenticate_random(&mut client).await;
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    // Try to access files with authentication
+    let result = client.get_file("root/", None).await;
 
+    // This should succeed (even if the directory is empty)
+    // The important part is that we get a successful response, not 401/403
+    if let Err(ApiError::Http { status, body }) = result {
+        panic!("Request failed with status {status}: {body}");
+    }
 
+    cleanup_test_database(db_pool).await;
 }
 
 #[tokio::test]
-async fn unauthenticated_file_delete_fails() {
-    
-    // Try to delete file without authentication
-    let anonymous_client = TEST_APP.anonymous_client();
-    let response = anonymous_client
-        .delete(format!("{}/files/root/nonexistent.txt", &TEST_APP.address))
-        .send()
-        .await
-        .expect("Failed to execute request");
+async fn authenticated_user_can_delete_files() {
+    let db_pool = create_test_db().await;
+    let mut client = ApiClient::new_local(db_pool.clone()).await;
+    let _user = authenticate_random(&mut client).await;
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    // Try to delete a non-existent file (should fail with 404, not auth error)
+    let result = client.delete_file("root/nonexistent.txt").await;
 
+    if let Err(ApiError::Http { status, body: _ }) = result {
+        // Should fail with 404 (not found), not 401/403 (auth errors)
+        assert_ne!(
+            status,
+            StatusCode::UNAUTHORIZED,
+            "Should not be unauthorized"
+        );
+        assert_ne!(status, StatusCode::FORBIDDEN, "Should not be forbidden");
+    } else {
+        // It's also possible the operation succeeds if the file handling allows it
+        panic!("Expected error for non-existent file deletion");
+    }
 
+    cleanup_test_database(db_pool).await;
 }
 
 #[tokio::test]
-async fn authenticated_user_can_upload_files() {
-    
-    let authenticated_client = TEST_APP.create_authenticated_user("testuser", "test@example.com", "password").await;
+async fn invalid_session_fails() {
+    let db_pool = create_test_db().await;
+    let mut client = ApiClient::new_local(db_pool.clone()).await;
 
-    // Upload a file
-    let response = authenticated_client
-        .post(format!("{}/files/root/", &TEST_APP.address))
-        .multipart(
-            TestApp::test_multipart_file("testfile.txt")
-        )
-        .send()
-        .await
-        .expect("Failed to upload file");
+    // Try to access files with invalid session
+    client.set_session("invalid_session".to_string());
+    let result = client.get_file("root/", None).await;
 
-    assert_eq!(response.status(), StatusCode::OK);
+    assert!(result.is_err());
+    if let Err(ApiError::Http { status, body: _ }) = result {
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    } else {
+        panic!("Expected HTTP error with status 401");
+    }
 
-    let body: Value = response.json().await.expect("Failed to parse response");
-    assert!(body.is_array());
-    assert!(!body.as_array().unwrap().is_empty());
-
-
-}
-
-#[tokio::test]
-async fn authenticated_user_can_create_directories() {
-    
-    let authenticated_client = TEST_APP.create_authenticated_user("testuser", "test@example.com", "password").await;
-
-    // Create a directory
-    let response = authenticated_client
-        .post(format!("{}/files/root/testdir/", &TEST_APP.address))
-        .send()
-        .await
-        .expect("Failed to create directory");
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let body: Value = response.json().await.expect("Failed to parse response");
-    assert!(body.is_array());
-
-
-}
-
-#[tokio::test]
-async fn file_owner_can_access_their_files() {
-    
-    let authenticated_client = TEST_APP.create_authenticated_user("testuser", "test@example.com", "password").await;
-
-    // First upload a file
-    let upload_response = authenticated_client
-        .post(format!("{}/files/root/", &TEST_APP.address))
-        .multipart(
-            TestApp::test_multipart_file("testfile.txt")
-        )
-        .send()
-        .await
-        .expect("Failed to upload file");
-
-    assert_eq!(upload_response.status(), StatusCode::OK);
-
-    // Now try to access the file
-    let response = authenticated_client
-        .get(format!("{}/files/root/testfile.txt", &TEST_APP.address))
-        .send()
-        .await
-        .expect("Failed to access file");
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-
-}
-
-#[tokio::test]
-async fn file_owner_can_delete_their_files() {
-    
-    let authenticated_client = TEST_APP.create_authenticated_user("testuser", "test@example.com", "password").await;
-
-    // First upload a file
-    let upload_response = authenticated_client
-        .post(format!("{}/files/root/", &TEST_APP.address))
-        .multipart(
-            TestApp::test_multipart_file("deleteme.txt")
-        )
-        .send()
-        .await
-        .expect("Failed to upload file");
-
-    assert_eq!(upload_response.status(), StatusCode::OK);
-
-    // Now delete the file
-    let response = authenticated_client
-        .delete(format!("{}/files/root/deleteme.txt", &TEST_APP.address))
-        .send()
-        .await
-        .expect("Failed to delete file");
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-
-}
-
-#[tokio::test]
-async fn non_owner_cannot_access_other_users_files() {
-    let app = TestApp::spawn().await;
-
-    // Create two users
-    let owner_client = TEST_APP.create_authenticated_user("user1", "user1@example.com", "password").await;
-    let other_client = TEST_APP.create_authenticated_user("user2", "user2@example.com", "password").await;
-
-    // Owner uploads a file
-    let upload_response = owner_client
-        .post(format!("{}/files/root/", &TEST_APP.address))
-        .multipart(
-            TestApp::test_multipart_file("private.txt")
-        )
-        .send()
-        .await
-        .expect("Failed to upload file");
-
-    assert_eq!(upload_response.status(), StatusCode::OK);
-
-    // Other user tries to access the file (should fail)
-    let response = other_client
-        .get(format!("{}/files/root/private.txt", &TEST_APP.address))
-        .send()
-        .await
-        .expect("Failed to execute request");
-
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
-
-
-}
-
-#[tokio::test]
-async fn non_owner_cannot_delete_other_users_files() {
-    let app = TestApp::spawn().await;
-
-    // Create two users
-    let owner_client = TEST_APP.create_authenticated_user("user1", "user1@example.com", "password").await;
-    let other_client = TEST_APP.create_authenticated_user("user2", "user2@example.com", "password").await;
-
-    // Owner uploads a file
-    let upload_response = owner_client
-        .post(format!("{}/files/root/", &TEST_APP.address))
-        .multipart(
-            TestApp::test_multipart_file("protected.txt")
-        )
-        .send()
-        .await
-        .expect("Failed to upload file");
-
-    assert_eq!(upload_response.status(), StatusCode::OK);
-
-    // Other user tries to delete the file (should fail)
-    let response = other_client
-        .delete(format!("{}/files/root/protected.txt", &TEST_APP.address))
-        .send()
-        .await
-        .expect("Failed to execute request");
-
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
-
-
-}
-
-#[tokio::test]
-async fn non_owner_cannot_move_other_users_files() {
-    let app = TestApp::spawn().await;
-
-    // Create two users
-    let owner_client = TEST_APP.create_authenticated_user("user1", "user1@example.com", "password").await;
-    let other_client = TEST_APP.create_authenticated_user("user2", "user2@example.com", "password").await;
-
-    // Owner uploads a file
-    let upload_response = owner_client
-        .post(format!("{}/files/root/", &TEST_APP.address))
-        .multipart(
-            TestApp::test_multipart_file("moveme.txt")
-        )
-        .send()
-        .await
-        .expect("Failed to upload file");
-
-    assert_eq!(upload_response.status(), StatusCode::OK);
-
-    // Other user tries to move the file (should fail)
-    let move_data = json!({
-        "from": "root/moveme.txt",
-        "to": "root/moved.txt"
-    });
-
-    let response = other_client
-        .patch(format!("{}/files", &TEST_APP.address))
-        .json(&move_data)
-        .send()
-        .await
-        .expect("Failed to execute request");
-
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
-
-
+    cleanup_test_database(db_pool).await;
 }

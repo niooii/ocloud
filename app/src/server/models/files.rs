@@ -1,14 +1,24 @@
 // model.rs
 
-use std::{fmt, path::{Path, PathBuf}};
+use crate::{
+    config::SETTINGS,
+    server::{
+        controllers::websocket::WsIncomingEvent,
+        error::{ServerError, ServerResult},
+        ServerState,
+    },
+};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::de::Error as err;
 use serde::{Deserialize, Serialize};
 use sqlx::prelude::FromRow;
+use std::{
+    fmt,
+    path::{Path, PathBuf},
+};
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 use uuid::Uuid;
-use crate::{config::SETTINGS, server::{controllers::websocket::WsIncomingEvent, error::{ServerError, ServerResult}, ServerState}};
 
 // A row from the database.
 #[derive(FromRow, Debug)]
@@ -28,18 +38,18 @@ pub struct Media {
 }
 
 impl Media {
-    /// Returns the path that the file should be at 
+    /// Returns the path that the file should be at
     /// on the host machine's filesystem.
     /// Is not guarenteed a file exists at this path.
-    /// Storage path follows this format: 
+    /// Storage path follows this format:
     /// `save_dir/[first 2 chars of hash]/[next 2]/[rest of hash]`
     pub async fn true_path(&self) -> PathBuf {
         let save_dir = &SETTINGS.directories.files_dir;
 
         let hash = self.file_hash.clone();
         let first_dir = &hash[0..2];
-        let second_dir  = &hash[2..4];
-        let fname  = &hash[4..];
+        let second_dir = &hash[2..4];
+        let fname = &hash[4..];
 
         save_dir.join(Path::new(&format!("{first_dir}/{second_dir}/{fname}")))
     }
@@ -47,31 +57,38 @@ impl Media {
     // Get a ReaderStream from the file, or an Err if it doesn't exist.
     pub async fn reader_stream(&self) -> ServerResult<ReaderStream<File>> {
         let file = File::open(&self.true_path().await)
-            .await.map_err(|e| ServerError::IOError { message: e.to_string() })?;
+            .await
+            .map_err(|e| ServerError::IOError {
+                message: e.to_string(),
+            })?;
 
         Ok(ReaderStream::new(file))
     }
 
     // Attempts to delete the underlying file from the disk.
     pub async fn delete_from_disk(&self) -> ServerResult<()> {
-        tokio::fs::remove_file(self.true_path().await.as_path()).await
-            .map_err(|e| ServerError::IOError { message: e.to_string() })
+        tokio::fs::remove_file(self.true_path().await.as_path())
+            .await
+            .map_err(|e| ServerError::IOError {
+                message: e.to_string(),
+            })
     }
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SFile {
     pub id: u64,
     pub media_id: Option<u64>,
     pub is_dir: bool,
     // computed when needed, not stored in DB
-    pub full_path: String,  
+    pub full_path: String,
     pub created_at: DateTime<Utc>,
     pub modified_at: DateTime<Utc>,
     // Either the name of the directory or the file
     pub top_level_name: String,
     // Whether file/folder is publicly accessible
     pub is_public: bool,
+    pub user_id: Option<i64>,
 }
 
 // A row from the sfiles table (new schema - no paths stored)
@@ -100,7 +117,7 @@ pub struct SFileEntryRow {
 
 // Helper struct for joining sfiles with their entry info
 #[derive(FromRow)]
-pub struct SFileWithEntry {
+pub struct SFileRowWithEntry {
     // From sfiles table
     pub id: i64,
     pub media_id: Option<i64>,
@@ -113,38 +130,33 @@ pub struct SFileWithEntry {
     pub parent_sfile_id: Option<i64>,
 }
 
-impl From<SFileRow> for SFile {
-    fn from(value: SFileRow) -> Self {
-        Self::from(&value)
+impl SFile {
+    pub fn from_row(row: SFileRow, full_path: &VirtualPath) -> ServerResult<Self> {
+        Ok(Self {
+            id: row.id as u64,
+            media_id: row.media_id.map(|id| id as u64),
+            is_dir: row.is_dir,
+            full_path: full_path.to_string(),
+            created_at: row.created_at.and_utc(),
+            modified_at: row.modified_at.and_utc(),
+            top_level_name: full_path.name().unwrap(),
+            is_public: row.is_public,
+            user_id: row.user_id,
+        })
     }
-}
 
-impl From<&SFileRow> for SFile {
-    fn from(value: &SFileRow) -> Self {
+    // Does not populate the full_path and top_level_name fields
+    pub fn from_row_incomplete(row: SFileRow) -> Self {
         Self {
-            id: value.id as u64,
-            media_id: value.media_id.map(|id| id as u64),
-            is_dir: value.is_dir,
-            full_path: String::new(), // Will be populated separately
-            created_at: value.created_at.and_utc(),
-            modified_at: value.modified_at.and_utc(),
-            top_level_name: String::new(), // Will be populated separately
-            is_public: value.is_public,
-        }
-    }
-}
-
-impl From<SFileWithEntry> for SFile {
-    fn from(value: SFileWithEntry) -> Self {
-        Self {
-            id: value.id as u64,
-            media_id: value.media_id.map(|id| id as u64),
-            is_dir: value.is_dir,
-            full_path: String::new(), // Will be computed by controller
-            created_at: value.created_at.and_utc(),
-            modified_at: value.modified_at.and_utc(),
-            top_level_name: value.filename,
-            is_public: value.is_public,
+            id: row.id as u64,
+            media_id: row.media_id.map(|id| id as u64),
+            is_dir: row.is_dir,
+            full_path: "".into(),
+            created_at: row.created_at.and_utc(),
+            modified_at: row.modified_at.and_utc(),
+            top_level_name: "".into(),
+            is_public: row.is_public,
+            user_id: row.user_id,
         }
     }
 }
@@ -177,34 +189,34 @@ impl std::error::Error for VirtualPathError {}
 /// The path can never be empty.
 pub struct VirtualPath {
     path: PathBuf,
-    is_dir: bool
-} 
+    is_dir: bool,
+}
 
 impl VirtualPath {
     pub fn root() -> Self {
         Self {
             path: PathBuf::from("root/"),
-            is_dir: true
+            is_dir: true,
         }
     }
 
     /// Fallible constructor that validates the path
     pub fn try_from_string<S: AsRef<str>>(path: S) -> Result<Self, VirtualPathError> {
         let path_str = path.as_ref();
-        
+
         if path_str.is_empty() {
             return Err(VirtualPathError::EmptyPath);
         }
-        
+
         if !path_str.starts_with("root/") {
             return Err(VirtualPathError::InvalidPrefix);
         }
-        
+
         // Check for invalid characters (null bytes, etc.)
         if path_str.contains('\0') {
             return Err(VirtualPathError::InvalidCharacters);
         }
-        
+
         Ok(VirtualPath::from(path_str))
     }
 
@@ -213,7 +225,7 @@ impl VirtualPath {
         if !other.is_dir {
             return false;
         }
- 
+
         let self_path = self.to_string();
         let other_path = other.to_string();
 
@@ -225,21 +237,26 @@ impl VirtualPath {
         // split self at others's length and see if it starts with a slash. if yes then
         // self is a child of other
         if self_path.contains(&other_path) {
-            self_path[other_path.len()..].chars().next()
-            .expect("Expected length check to work idiot") == '/'
+            self_path[other_path.len()..]
+                .chars()
+                .next()
+                .expect("Expected length check to work idiot")
+                == '/'
         } else {
             false
         }
     }
 
     pub fn path_parts(&self) -> Vec<String> {
-        self.path.components()
+        self.path
+            .components()
             .map(|comp| comp.as_os_str().to_string_lossy().to_string())
             .collect()
     }
-    
+
     pub fn path_parts_no_root(&self) -> Vec<String> {
-        self.path.components()
+        self.path
+            .components()
             .map(|comp| comp.as_os_str().to_string_lossy().to_string())
             .skip(1)
             .collect()
@@ -251,7 +268,9 @@ impl VirtualPath {
 
     pub fn err_if_dir(&self) -> ServerResult<()> {
         if self.is_dir() {
-            Err(ServerError::InternalError { message: "Bad path: did not expect directory".to_string() })
+            Err(ServerError::InternalError {
+                message: "Bad path: did not expect directory".to_string(),
+            })
         } else {
             Ok(())
         }
@@ -259,7 +278,9 @@ impl VirtualPath {
 
     pub fn err_if_file(&self) -> ServerResult<()> {
         if !self.is_dir() {
-            Err(ServerError::InternalError { message: "Bad path: did not expect file".to_string() })
+            Err(ServerError::InternalError {
+                message: "Bad path: did not expect file".to_string(),
+            })
         } else {
             Ok(())
         }
@@ -277,9 +298,7 @@ impl VirtualPath {
     /// dir_name should not contain a trailing slash
     pub fn push_dir(&mut self, dir_name: String) -> ServerResult<()> {
         self.err_if_file()?;
-        self.path.push(
-            format!("{dir_name}/")
-        );
+        self.path.push(format!("{dir_name}/"));
         Ok(())
     }
 
@@ -300,19 +319,21 @@ impl VirtualPath {
     pub fn as_dir(&self) -> Self {
         Self {
             path: format!("{self}/").into(),
-            is_dir: true
+            is_dir: true,
         }
     }
 
     pub fn as_file(&self) -> Self {
         Self {
             path: self.to_string().into(),
-            is_dir: false
+            is_dir: false,
         }
     }
 
     pub fn file_name(&self) -> Option<String> {
-        self.path.file_name().map(|s| s.to_string_lossy().to_string())
+        self.path
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
     }
 
     /// Get just the name component (filename or directory name)
@@ -320,12 +341,12 @@ impl VirtualPath {
         if self.is_root() {
             return Some("root".to_string());
         }
-        
+
         let parts = self.path_parts_no_root();
         if parts.is_empty() {
             return None;
         }
-        
+
         let last_part = parts.last().unwrap();
         if self.is_dir && last_part.is_empty() {
             // Handle trailing slash case
@@ -344,23 +365,23 @@ impl VirtualPath {
         if self.is_root() {
             return None;
         }
-        
+
         let parts = self.path_parts_no_root();
         if parts.is_empty() {
             return None;
         }
-        
+
         if parts.len() == 1 {
             return Some(VirtualPath::root());
         }
-        
+
         let mut parent_parts = parts;
         if self.is_dir() {
             parent_parts.pop(); // Remove the current directory name
         } else {
             parent_parts.pop(); // Remove the file name
         }
-        
+
         let parent_path = format!("root/{}/", parent_parts.join("/"));
         Some(VirtualPath::from(parent_path))
     }
@@ -431,16 +452,15 @@ impl Clone for VirtualPath {
 impl<'de> Deserialize<'de> for VirtualPath {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> {
+        D: serde::Deserializer<'de>,
+    {
         let val = String::deserialize(deserializer)?;
         if !val.starts_with("root/") {
-            return Err(D::Error::custom(ServerError::InternalError { message: "Path should start with 'root/'.".into() }));
+            return Err(D::Error::custom(ServerError::InternalError {
+                message: "Path should start with 'root/'.".into(),
+            }));
         }
-        Ok(
-            VirtualPath::from(
-                val
-            )
-        )
+        Ok(VirtualPath::from(val))
     }
 }
 
@@ -458,13 +478,13 @@ impl From<&str> for VirtualPath {
             for c in value.chars() {
                 if !(dedup.ends_with('/') && c == '/') {
                     dedup.push(c);
-                } 
+                }
             }
             dedup
         });
-        Self { 
+        Self {
             is_dir: check_is_dir(&path),
-            path
+            path,
         }
     }
 }
@@ -503,7 +523,7 @@ pub struct FileUploadInfo {
     pub file_hash: String,
     pub vpath: VirtualPath,
     pub user_id: i64,
-}           
+}
 
 // Websocket (outgoing) events
 #[derive(Debug, Clone, Serialize, ocloud_macros::WsOutEvent)]
@@ -545,7 +565,7 @@ pub struct UploadCompletedEvent {
 // Incoming websocket events
 #[ocloud_macros::WsIncomingEvent]
 pub struct CancelUploadEvent {
-    pub temp: String
+    pub temp: String,
 }
 
 impl WsIncomingEvent for CancelUploadEvent {
